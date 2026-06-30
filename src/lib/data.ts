@@ -21,17 +21,43 @@ export const HEALTH_CONDITIONS = [
 ];
 
 export const PA_COUNTIES = [
-  { value: "lehigh", label: "Lehigh County", region: "Lehigh Valley" },
-  { value: "northampton", label: "Northampton County", region: "Lehigh Valley" },
-  { value: "berks", label: "Berks County", region: "Southeast PA" },
-  { value: "philadelphia", label: "Philadelphia County", region: "Southeast PA" },
-  { value: "allegheny", label: "Allegheny County (Pittsburgh)", region: "Southwest PA" },
-  { value: "dauphin", label: "Dauphin County (Harrisburg)", region: "Central PA" },
-  { value: "lancaster", label: "Lancaster County", region: "Southeast PA" },
-  { value: "monroe", label: "Monroe County", region: "Northeast PA" },
-  { value: "luzerne", label: "Luzerne County", region: "Northeast PA" },
-  { value: "centre", label: "Centre County", region: "Central PA" },
-  { value: "other", label: "Other PA County" },
+  { value: "lehigh", label: "Lehigh County", region: "Lehigh Valley", lat: 40.6023, lng: -75.4714 },
+  { value: "northampton", label: "Northampton County", region: "Lehigh Valley", lat: 40.7540, lng: -75.3073 },
+  { value: "berks", label: "Berks County", region: "Southeast PA", lat: 40.4160, lng: -75.9267 },
+  { value: "philadelphia", label: "Philadelphia County", region: "Southeast PA", lat: 39.9526, lng: -75.1652 },
+  { value: "allegheny", label: "Allegheny County (Pittsburgh)", region: "Southwest PA", lat: 40.4406, lng: -79.9959 },
+  { value: "dauphin", label: "Dauphin County (Harrisburg)", region: "Central PA", lat: 40.2732, lng: -76.8867 },
+  { value: "lancaster", label: "Lancaster County", region: "Southeast PA", lat: 40.0379, lng: -76.3055 },
+  { value: "monroe", label: "Monroe County", region: "Northeast PA", lat: 41.0568, lng: -75.3365 },
+  { value: "luzerne", label: "Luzerne County", region: "Northeast PA", lat: 41.1728, lng: -75.9975 },
+  { value: "centre", label: "Centre County", region: "Central PA", lat: 40.9192, lng: -77.8200 },
+  { value: "other", label: "Other PA County", region: "Pennsylvania", lat: 40.8781, lng: -77.7996 },
+];
+
+export interface MonitorLocation {
+  name: string;
+  lat: number;
+  lng: number;
+  type: "epa" | "low-cost";
+  pollutants: string[];
+}
+
+export const EPA_MONITORS: MonitorLocation[] = [
+  { name: "Philadelphia - Northeast Airport", lat: 40.0818, lng: -75.0115, type: "epa", pollutants: ["PM2.5", "NO₂", "O₃"] },
+  { name: "Philadelphia - Rittenhouse", lat: 39.9485, lng: -75.1710, type: "epa", pollutants: ["PM2.5", "SO₂"] },
+  { name: "Philadelphia - Roxborough", lat: 40.0450, lng: -75.2310, type: "epa", pollutants: ["PM2.5", "O₃"] },
+  { name: "Pittsburgh - Lawrenceville", lat: 40.4654, lng: -79.9608, type: "epa", pollutants: ["PM2.5", "NO₂", "SO₂", "O₃"] },
+  { name: "Pittsburgh - South Fayette", lat: 40.3776, lng: -80.1620, type: "epa", pollutants: ["PM2.5", "SO₂"] },
+  { name: "Pittsburgh - Liberty", lat: 40.3994, lng: -79.8451, type: "epa", pollutants: ["PM2.5", "O₃"] },
+  { name: "Allentown - Lehigh Valley", lat: 40.6084, lng: -75.4902, type: "epa", pollutants: ["PM2.5", "O₃"] },
+  { name: "Bethlehem", lat: 40.6259, lng: -75.3705, type: "epa", pollutants: ["PM2.5"] },
+  { name: "Easton", lat: 40.6910, lng: -75.2210, type: "epa", pollutants: ["PM2.5", "O₃"] },
+  { name: "Reading - Berks County", lat: 40.3357, lng: -75.9270, type: "epa", pollutants: ["PM2.5", "O₃"] },
+  { name: "Harrisburg - Dauphin", lat: 40.2632, lng: -76.8815, type: "epa", pollutants: ["PM2.5", "NO₂", "O₃"] },
+  { name: "Lancaster", lat: 40.0429, lng: -76.3108, type: "epa", pollutants: ["PM2.5", "O₃"] },
+  { name: "Scranton - Lackawanna", lat: 41.4090, lng: -75.6624, type: "epa", pollutants: ["PM2.5"] },
+  { name: "Erie", lat: 42.1292, lng: -80.0851, type: "epa", pollutants: ["PM2.5", "O₃"] },
+  { name: "State College - Centre", lat: 40.7934, lng: -77.8600, type: "epa", pollutants: ["O₃"] },
 ];
 
 export interface UserProfile {
@@ -66,6 +92,7 @@ export interface HealthOutcome {
 
 export interface MonitorCoverage {
   nearestMonitorMiles: number;
+  nearestMonitorName: string;
   withinCoverage: boolean;
   coverageGap: boolean;
   monitorType: string;
@@ -77,6 +104,7 @@ const COUNTY_DATA: Record<string, {
   so2: number;
   ozone: number;
   nearestMonitorMiles: number;
+  nearestMonitorName: string;
   monitorType: string;
   asthmaRate: number;
   diabetesRate: number;
@@ -86,57 +114,68 @@ const COUNTY_DATA: Record<string, {
 }> = {
   lehigh: {
     pm25: 11.2, no2: 18.5, so2: 3.1, ozone: 0.062,
-    nearestMonitorMiles: 5.2, monitorType: "EPA AQS Monitor",
+    nearestMonitorMiles: 5.2, nearestMonitorName: "Allentown - Lehigh Valley",
+    monitorType: "EPA AQS Monitor",
     asthmaRate: 12.8, diabetesRate: 11.5, heartDiseaseRate: 6.2, cancerRate: 4.1, obesityRate: 33.2,
   },
   northampton: {
     pm25: 10.8, no2: 15.2, so2: 2.8, ozone: 0.059,
-    nearestMonitorMiles: 12.4, monitorType: "EPA AQS Monitor",
+    nearestMonitorMiles: 12.4, nearestMonitorName: "Bethlehem",
+    monitorType: "EPA AQS Monitor",
     asthmaRate: 11.5, diabetesRate: 10.8, heartDiseaseRate: 5.9, cancerRate: 3.8, obesityRate: 31.5,
   },
   philadelphia: {
     pm25: 13.1, no2: 24.3, so2: 4.5, ozone: 0.068,
-    nearestMonitorMiles: 2.1, monitorType: "EPA AQS Monitor",
+    nearestMonitorMiles: 2.1, nearestMonitorName: "Philadelphia - Rittenhouse",
+    monitorType: "EPA AQS Monitor",
     asthmaRate: 15.2, diabetesRate: 14.1, heartDiseaseRate: 7.8, cancerRate: 4.9, obesityRate: 36.1,
   },
   allegheny: {
     pm25: 14.5, no2: 22.1, so2: 5.8, ozone: 0.065,
-    nearestMonitorMiles: 3.5, monitorType: "EPA AQS Monitor",
+    nearestMonitorMiles: 3.5, nearestMonitorName: "Pittsburgh - Lawrenceville",
+    monitorType: "EPA AQS Monitor",
     asthmaRate: 14.1, diabetesRate: 12.9, heartDiseaseRate: 7.2, cancerRate: 4.6, obesityRate: 34.8,
   },
   berks: {
     pm25: 10.5, no2: 14.1, so2: 2.5, ozone: 0.058,
-    nearestMonitorMiles: 18.7, monitorType: "EPA AQS Monitor",
+    nearestMonitorMiles: 18.7, nearestMonitorName: "Reading - Berks County",
+    monitorType: "EPA AQS Monitor",
     asthmaRate: 11.2, diabetesRate: 10.2, heartDiseaseRate: 5.5, cancerRate: 3.5, obesityRate: 30.8,
   },
   dauphin: {
     pm25: 10.9, no2: 16.3, so2: 3.2, ozone: 0.060,
-    nearestMonitorMiles: 7.8, monitorType: "EPA AQS Monitor",
+    nearestMonitorMiles: 7.8, nearestMonitorName: "Harrisburg - Dauphin",
+    monitorType: "EPA AQS Monitor",
     asthmaRate: 12.1, diabetesRate: 11.1, heartDiseaseRate: 6.0, cancerRate: 3.9, obesityRate: 32.1,
   },
   lancaster: {
     pm25: 11.8, no2: 13.8, so2: 2.3, ozone: 0.061,
-    nearestMonitorMiles: 15.3, monitorType: "EPA AQS Monitor",
+    nearestMonitorMiles: 15.3, nearestMonitorName: "Lancaster",
+    monitorType: "EPA AQS Monitor",
     asthmaRate: 10.8, diabetesRate: 9.8, heartDiseaseRate: 5.3, cancerRate: 3.4, obesityRate: 29.5,
   },
   monroe: {
     pm25: 8.9, no2: 9.5, so2: 1.8, ozone: 0.055,
-    nearestMonitorMiles: 33.1, monitorType: "Nearest EPA Monitor (remote)",
+    nearestMonitorMiles: 33.1, nearestMonitorName: "Scranton - Lackawanna",
+    monitorType: "Nearest EPA Monitor (remote)",
     asthmaRate: 10.5, diabetesRate: 9.5, heartDiseaseRate: 5.1, cancerRate: 3.2, obesityRate: 28.9,
   },
   luzerne: {
     pm25: 9.8, no2: 11.2, so2: 2.9, ozone: 0.057,
-    nearestMonitorMiles: 28.5, monitorType: "Nearest EPA Monitor (remote)",
+    nearestMonitorMiles: 28.5, nearestMonitorName: "Scranton - Lackawanna",
+    monitorType: "Nearest EPA Monitor (remote)",
     asthmaRate: 12.5, diabetesRate: 11.8, heartDiseaseRate: 6.5, cancerRate: 4.0, obesityRate: 33.8,
   },
   centre: {
     pm25: 8.2, no2: 8.8, so2: 1.5, ozone: 0.053,
-    nearestMonitorMiles: 42.3, monitorType: "Nearest EPA Monitor (remote)",
+    nearestMonitorMiles: 42.3, nearestMonitorName: "State College - Centre",
+    monitorType: "Nearest EPA Monitor (remote)",
     asthmaRate: 9.2, diabetesRate: 8.5, heartDiseaseRate: 4.8, cancerRate: 3.0, obesityRate: 27.2,
   },
   other: {
     pm25: 9.5, no2: 10.5, so2: 2.0, ozone: 0.056,
-    nearestMonitorMiles: 35.0, monitorType: "Nearest EPA Monitor (remote)",
+    nearestMonitorMiles: 35.0, nearestMonitorName: "Nearest available",
+    monitorType: "Nearest EPA Monitor (remote)",
     asthmaRate: 10.8, diabetesRate: 10.0, heartDiseaseRate: 5.5, cancerRate: 3.5, obesityRate: 30.0,
   },
 };
@@ -199,7 +238,6 @@ function getPollutantStatus(pollutant: string, value: number, susceptible: boole
     if (value <= thresholds.unhealthy) return "unhealthy";
     return "hazardous";
   }
-  // ozone
   const thresholds = susceptible
     ? { good: 0.050, moderate: 0.055, unhealthySensitive: 0.060, unhealthy: 0.070 }
     : { good: 0.054, moderate: 0.060, unhealthySensitive: 0.070, unhealthy: 0.085 };
@@ -375,6 +413,7 @@ export function assessRisk(profile: UserProfile): RiskAssessment {
 
   const monitorCoverage: MonitorCoverage = {
     nearestMonitorMiles: county.nearestMonitorMiles,
+    nearestMonitorName: county.nearestMonitorName,
     withinCoverage: county.nearestMonitorMiles <= 15.5,
     coverageGap: county.nearestMonitorMiles > 15.5,
     monitorType: county.monitorType,
