@@ -1,306 +1,118 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import {
-  assessRisk,
-  AGE_GROUPS,
-  PA_COUNTIES,
-  type ExposureAlert,
-  type HealthOutcome,
-  type RiskAssessment,
-} from "@/lib/data";
+import { useSearchParams } from "next/navigation";
+import { Activity, ArrowLeft, MapPin } from "lucide-react";
+import { assess } from "@/lib/scoring";
+import { AGE_GROUPS, HEALTH_CONDITIONS } from "@/lib/data";
+import AssessmentPanels from "@/components/AssessmentPanels";
+import MethodsDrawer from "@/components/MethodsDrawer";
 
-const Map = dynamic(() => import("@/components/Map"), { ssr: false });
+const Map = dynamic(() => import("@/components/Map"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full min-h-[420px] w-full rounded-xl border border-slate-200 bg-slate-100 animate-pulse" />
+  ),
+});
 
-function statusColor(status: ExposureAlert["status"]) {
-  switch (status) {
-    case "good":
-      return { bg: "bg-green-50", border: "border-green-300", text: "text-green-800", badge: "bg-green-600" };
-    case "moderate":
-      return { bg: "bg-yellow-50", border: "border-yellow-300", text: "text-yellow-800", badge: "bg-yellow-500" };
-    case "unhealthy-sensitive":
-      return { bg: "bg-orange-50", border: "border-orange-300", text: "text-orange-800", badge: "bg-orange-500" };
-    case "unhealthy":
-      return { bg: "bg-red-50", border: "border-red-300", text: "text-red-800", badge: "bg-red-600" };
-    case "hazardous":
-      return { bg: "bg-purple-50", border: "border-purple-300", text: "text-purple-800", badge: "bg-purple-700" };
-  }
-}
+function Report() {
+  const params = useSearchParams();
+  const county = params.get("county") ?? "";
+  const age = params.get("age") ?? "30-49";
+  const conditionsStr = params.get("conditions") ?? "none";
+  const conditions = conditionsStr.split(",").filter(Boolean);
 
-function statusLabel(status: ExposureAlert["status"]) {
-  switch (status) {
-    case "good": return "Good";
-    case "moderate": return "Moderate";
-    case "unhealthy-sensitive": return "Alert: Sensitive Groups";
-    case "unhealthy": return "Unhealthy";
-    case "hazardous": return "Hazardous";
-  }
-}
+  const assessment = county ? assess({ ageGroup: age, conditions, county }) : null;
 
-function riskColor(level: HealthOutcome["riskLevel"]) {
-  switch (level) {
-    case "low":
-      return { bg: "bg-green-50", border: "border-green-300", text: "text-green-800", badge: "bg-green-600" };
-    case "moderate":
-      return { bg: "bg-yellow-50", border: "border-yellow-300", text: "text-yellow-800", badge: "bg-yellow-500" };
-    case "elevated":
-      return { bg: "bg-orange-50", border: "border-orange-300", text: "text-orange-800", badge: "bg-orange-500" };
-    case "high":
-      return { bg: "bg-red-50", border: "border-red-300", text: "text-red-800", badge: "bg-red-600" };
-  }
-}
-
-function overallRiskDisplay(risk: RiskAssessment["overallRisk"]) {
-  switch (risk) {
-    case "low":
-      return { color: "bg-green-600", label: "Low Risk", description: "Your combined exposure and health profile suggests low overall risk." };
-    case "moderate":
-      return { color: "bg-yellow-500", label: "Moderate Risk", description: "Some factors warrant attention. Review the details below and consider preventive measures." };
-    case "high":
-      return { color: "bg-orange-500", label: "High Risk", description: "Multiple risk factors are elevated. Review recommendations and consider consulting your healthcare provider." };
-    case "very-high":
-      return { color: "bg-red-600", label: "Very High Risk", description: "Significant health and exposure risks identified. We recommend discussing these findings with your healthcare provider." };
-  }
-}
-
-function DashboardContent() {
-  const searchParams = useSearchParams();
-  const age = searchParams.get("age") ?? "";
-  const conditionsStr = searchParams.get("conditions") ?? "";
-  const county = searchParams.get("county") ?? "";
-
-  if (!age || !conditionsStr || !county) {
+  if (!assessment) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-20 text-center">
-        <p className="text-gray-600 text-lg">No profile data provided.</p>
-        <Link href="/" className="mt-4 inline-block text-blue-600 hover:underline">
-          Go back and enter your information
+      <div className="max-w-md mx-auto px-4 py-24 text-center">
+        <MapPin className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+        <p className="text-slate-600">No location selected for this report.</p>
+        <Link href="/" className="mt-4 inline-block text-blue-600 hover:underline text-sm">
+          ← Back to the operations map
         </Link>
       </div>
     );
   }
 
-  const profile = {
-    ageGroup: age,
-    conditions: conditionsStr.split(","),
-    county,
-  };
-
-  const assessment = assessRisk(profile);
-  const overall = overallRiskDisplay(assessment.overallRisk);
   const ageLabel = AGE_GROUPS.find((g) => g.value === age)?.label ?? age;
-  const countyLabel = PA_COUNTIES.find((c) => c.value === county)?.label ?? county;
-  const isSusceptible = assessment.susceptibilityScore > 1.2;
+  const condLabels = conditions
+    .filter((c) => c !== "none")
+    .map((c) => HEALTH_CONDITIONS.find((h) => h.value === c)?.short ?? c);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-      {/* Map + Overall Risk */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <Map selectedCounty={county} />
-        </div>
-
-        <div className="space-y-4">
-          {/* Profile Summary */}
-          <div className="bg-white rounded-xl shadow p-5 border border-gray-100">
-            <h2 className="text-lg font-bold text-gray-900 mb-3">Your Profile</h2>
-            <dl className="space-y-2 text-sm">
-              <div>
-                <dt className="text-gray-500">Location</dt>
-                <dd className="font-medium text-gray-900">{countyLabel}</dd>
-              </div>
-              <div>
-                <dt className="text-gray-500">Age Group</dt>
-                <dd className="font-medium text-gray-900">{ageLabel}</dd>
-              </div>
-              <div>
-                <dt className="text-gray-500">Health Conditions</dt>
-                <dd className="font-medium text-gray-900">
-                  {profile.conditions.includes("none")
-                    ? "None reported"
-                    : profile.conditions
-                        .map((c) => c.replace(/_/g, " "))
-                        .map((c) => c.charAt(0).toUpperCase() + c.slice(1))
-                        .join(", ")}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-gray-500">Susceptibility</dt>
-                <dd>
-                  <span className={`inline-block px-3 py-1 rounded-full text-white text-xs font-semibold ${isSusceptible ? "bg-orange-500" : "bg-green-600"}`}>
-                    {isSusceptible ? "Elevated" : "Standard"}
-                  </span>
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-          {/* Overall Assessment */}
-          <div className={`rounded-xl shadow p-5 border ${
-            assessment.overallRisk === "low" ? "bg-green-50 border-green-200" :
-            assessment.overallRisk === "moderate" ? "bg-yellow-50 border-yellow-200" :
-            assessment.overallRisk === "high" ? "bg-orange-50 border-orange-200" :
-            "bg-red-50 border-red-200"
-          }`}>
-            <h2 className="text-lg font-bold text-gray-900 mb-3">Overall Assessment</h2>
-            <div className="flex items-center gap-3 mb-3">
-              <span className={`inline-block w-4 h-4 rounded-full ${overall.color}`} />
-              <span className="text-2xl font-bold">{overall.label}</span>
-            </div>
-            <p className="text-sm text-gray-700 leading-relaxed">{overall.description}</p>
-          </div>
-
-          {/* Monitor Coverage */}
-          <div className={`rounded-xl shadow p-5 border ${
-            assessment.monitorCoverage.coverageGap ? "bg-amber-50 border-amber-200" : "bg-white border-gray-100"
-          }`}>
-            <h2 className="text-sm font-bold text-gray-900 mb-2">EPA Monitor Coverage</h2>
-            <div className="space-y-2 text-sm">
-              <div>
-                <span className="text-gray-500">Nearest Monitor: </span>
-                <span className="font-semibold">{assessment.monitorCoverage.nearestMonitorMiles.toFixed(1)} mi</span>
-              </div>
-              <div>
-                <span className="text-gray-500">Station: </span>
-                <span className="font-medium">{assessment.monitorCoverage.nearestMonitorName}</span>
-              </div>
-              <div>
-                <span className={`inline-block px-2.5 py-0.5 rounded-full text-white text-xs font-semibold ${
-                  assessment.monitorCoverage.coverageGap ? "bg-amber-500" : "bg-green-600"
-                }`}>
-                  {assessment.monitorCoverage.coverageGap ? "Monitoring Gap" : "Within Coverage"}
-                </span>
-              </div>
-            </div>
-            {assessment.monitorCoverage.coverageGap && (
-              <p className="mt-2 text-xs text-amber-800">
-                Your area is outside the 15.5-mile coverage zone. Exposure estimates may be less precise.
-              </p>
-            )}
+    <div className="max-w-[1400px] mx-auto px-4 py-4 space-y-4">
+      {/* Profile strip */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-slate-400">Location</div>
+          <div className="text-sm font-semibold text-slate-800">
+            {assessment.county.label} · {assessment.county.region}
           </div>
         </div>
-      </div>
-
-      {/* Exposure Alerts */}
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-1">
-          Air Quality Exposure Levels
-        </h2>
-        {isSusceptible && (
-          <p className="text-sm text-gray-500 mb-3">
-            Thresholds adjusted for your susceptibility profile.
-          </p>
-        )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {assessment.exposureAlerts.map((alert) => {
-            const colors = statusColor(alert.status);
-            return (
-              <div key={alert.pollutant} className={`rounded-xl p-4 border ${colors.bg} ${colors.border}`}>
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className={`font-semibold text-sm ${colors.text}`}>{alert.pollutant}</h3>
-                </div>
-                <p className={`text-2xl font-bold ${colors.text} mb-1`}>
-                  {alert.level} <span className="text-xs font-normal">{alert.unit}</span>
-                </p>
-                <span className={`inline-block px-2 py-0.5 rounded-full text-white text-xs font-semibold ${colors.badge} mb-2`}>
-                  {statusLabel(alert.status)}
-                </span>
-                <p className={`text-xs ${colors.text} leading-relaxed`}>{alert.message}</p>
-              </div>
-            );
-          })}
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-slate-400">Age group</div>
+          <div className="text-sm font-medium text-slate-700">{ageLabel}</div>
         </div>
-      </div>
-
-      {/* Health Outcomes */}
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-1">
-          Local Health Outcomes
-        </h2>
-        <p className="text-sm text-gray-500 mb-3">
-          County-level prevalence for conditions linked to environmental exposures.
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {assessment.healthOutcomes.map((outcome) => {
-            const colors = riskColor(outcome.riskLevel);
-            return (
-              <div key={outcome.condition} className={`rounded-xl p-4 border ${colors.bg} ${colors.border}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className={`font-semibold ${colors.text}`}>{outcome.condition}</h3>
-                  <span className={`px-2 py-0.5 rounded-full text-white text-xs font-semibold ${colors.badge}`}>
-                    {outcome.riskLevel.charAt(0).toUpperCase() + outcome.riskLevel.slice(1)}
-                  </span>
-                </div>
-                <p className={`text-xl font-bold ${colors.text} mb-1`}>{outcome.prevalenceRate}</p>
-                <p className={`text-xs ${colors.text} leading-relaxed`}>{outcome.description}</p>
-              </div>
-            );
-          })}
+        <div className="min-w-0">
+          <div className="text-[10px] uppercase tracking-wide text-slate-400">Conditions</div>
+          <div className="text-sm font-medium text-slate-700">
+            {condLabels.length ? condLabels.join(", ") : "None reported"}
+          </div>
         </div>
-      </div>
-
-      {/* Recommendations */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-        <h2 className="text-xl font-bold text-blue-900 mb-3">
-          Personalized Recommendations
-        </h2>
-        <ul className="space-y-2">
-          {assessment.recommendations.map((rec, i) => (
-            <li key={i} className="flex gap-3 text-sm text-blue-900 leading-relaxed">
-              <span className="text-blue-400 mt-0.5 shrink-0">&#9679;</span>
-              {rec}
-            </li>
-          ))}
-        </ul>
-        <div className="mt-5 p-3 bg-white rounded-lg border border-blue-100">
-          <p className="text-xs text-gray-500 leading-relaxed">
-            <strong>Disclaimer:</strong> This assessment is for informational
-            purposes only and does not constitute medical advice. If you have
-            concerns about your health, please consult a qualified healthcare
-            provider.
-          </p>
-        </div>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-4">
-        <Link href="/" className="flex-1 text-center py-3 px-6 rounded-lg bg-[#1e3a5f] text-white font-semibold hover:bg-[#163050] transition">
-          Update My Profile
+        <Link
+          href="/"
+          className="ml-auto flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Edit on map
         </Link>
       </div>
+
+      {/* Map */}
+      <div className="h-[360px]">
+        <Map
+          selectedCounty={county}
+          layers={{ monitors: true, coverage: true, pm25: false, no2: false, ozone: false, vulnerability: true }}
+        />
+      </div>
+
+      <AssessmentPanels a={assessment} />
     </div>
   );
 }
 
 export default function DashboardPage() {
   return (
-    <div className="flex flex-col min-h-screen">
-      <header className="bg-[#1e3a5f] text-white py-5 px-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div>
-            <Link href="/" className="hover:opacity-90 transition">
-              <h1 className="text-2xl font-bold tracking-tight">PASS Equity Atlas</h1>
-            </Link>
-            <p className="mt-1 text-blue-200 text-sm">Your Personalized Exposure &amp; Health Assessment</p>
-          </div>
-          <Link href="/" className="text-sm text-blue-200 hover:text-white transition">
-            ← New Assessment
+    <div className="flex flex-col min-h-screen bg-slate-50">
+      <header className="bg-[#0f2540] text-white">
+        <div className="max-w-[1400px] mx-auto px-4 h-14 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2.5 hover:opacity-90">
+            <div className="w-8 h-8 rounded-lg bg-blue-500/20 border border-blue-400/30 flex items-center justify-center">
+              <Activity className="w-4 h-4 text-blue-300" />
+            </div>
+            <div>
+              <h1 className="text-base font-bold leading-none tracking-tight">AirHealth PASS</h1>
+              <p className="text-[10px] text-blue-300/80 leading-none mt-0.5">Full Environmental-Health Report</p>
+            </div>
           </Link>
+          <MethodsDrawer />
         </div>
       </header>
 
       <main className="flex-1">
-        <Suspense fallback={<div className="max-w-7xl mx-auto px-4 py-20 text-center text-gray-500">Loading your assessment...</div>}>
-          <DashboardContent />
+        <Suspense
+          fallback={<div className="max-w-md mx-auto px-4 py-24 text-center text-slate-400">Loading report…</div>}
+        >
+          <Report />
         </Suspense>
       </main>
 
-      <footer className="bg-gray-100 border-t border-gray-200 py-5 px-4 mt-auto">
-        <div className="max-w-7xl mx-auto text-center text-sm text-gray-500">
-          <p>PASS Equity Atlas — Lehigh University | Environmental Health Equity Research</p>
-          <p className="mt-1">Data sources: EPA AQS Monitors, CDC PLACES, U.S. Census Bureau</p>
+      <footer className="border-t border-slate-200 bg-white py-4 px-4">
+        <div className="max-w-[1400px] mx-auto text-center text-xs text-slate-400">
+          AirHealth PASS — Lehigh University · Environmental Health Equity Research · Demo data only.
         </div>
       </footer>
     </div>

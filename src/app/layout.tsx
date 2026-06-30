@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PASS Equity Atlas",
+  title: "AirHealth PASS — PA Environmental Health Operations",
   description:
-    "Pennsylvania Air Quality & Health Equity Atlas — Preventive strategies for susceptible populations",
+    "Operational dashboard for Pennsylvania air quality & health equity. Search a county, set your health profile, and see personalized exposure risk, EPA monitor coverage gaps, and prevention guidance.",
 };
 
 export default function RootLayout({
