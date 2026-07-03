@@ -5,7 +5,7 @@ import { invalidate } from "@/lib/cache";
 import { bad, handleError, ok } from "@/lib/api";
 
 /**
- * Scheduled refresh (vercel.json cron, every 15 minutes):
+ * Scheduled refresh (vercel.json cron — daily on Vercel Hobby, every 15 minutes on Pro):
  *  1. Invalidate the current-air-quality cache tier.
  *  2. Re-fetch air quality for every active watch rule and evaluate it.
  *  3. Record trigger timestamps so the Alerts page shows history.

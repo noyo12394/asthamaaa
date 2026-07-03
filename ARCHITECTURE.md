@@ -74,7 +74,7 @@ for SQL access and durability.
 
 ## Scheduled refresh
 
-`vercel.json` cron hits `/api/cron/refresh` every 15 minutes (Bearer-guarded by
+`vercel.json` cron hits `/api/cron/refresh` daily (Hobby-plan limit; use `*/15 * * * *` on Pro; Bearer-guarded by
 `CRON_SECRET`): invalidates the current-AQ cache tier, re-fetches air quality for
 every active watch rule, records trigger timestamps, and warms caches for saved
 locations. Data older than its TTL is re-labeled on read, so staleness is visible

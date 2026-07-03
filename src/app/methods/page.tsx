@@ -192,7 +192,7 @@ level:  < 25  Low        25–49  Moderate
           Browsers never call external APIs directly — the backend geocodes, fetches, caches
           (10-minute TTL for current air quality, 24 h for geocoding, long-term for county
           datasets), logs every fetch to the source ledger, and recomputes watch rules on a
-          15-minute Vercel Cron schedule. The Data Freshness panel (header indicator and{" "}
+          scheduled Vercel Cron refresh (daily on Hobby, every 15 minutes on Pro). The Data Freshness panel (header indicator and{" "}
           <code className="bg-surface-2 px-1">/api/freshness</code>) exposes the last attempt and
           last success per source.
         </p>

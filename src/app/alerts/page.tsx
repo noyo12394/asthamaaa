@@ -59,9 +59,9 @@ export default function AlertsPage() {
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6">
         <h1 className="text-lg font-semibold">Alert builder</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-2">
-          Watch rules are evaluated by the scheduled backend refresh (every 15 minutes on Vercel
-          Cron). Triggers are recorded here; email/SMS delivery is stubbed at the architecture
-          level and intentionally not enabled.
+          Watch rules are evaluated by the scheduled backend refresh via Vercel Cron (daily on
+          the Hobby plan, every 15 minutes on Pro). Triggers are recorded here; email/SMS
+          delivery is stubbed at the architecture level and intentionally not enabled.
         </p>
         {persistence === "memory" && (
           <p className="mt-2 inline-block border border-warning/40 bg-[#faf3d7] px-2 py-1 text-[11px] text-[#8a6d00]">

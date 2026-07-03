@@ -23,7 +23,7 @@ Live: https://pass-equity-atlas.vercel.app
 - **Monitor Gaps** — ranks where temporary low-cost sensors would help most
   (coverage gap × vulnerability), with "why this helps" reasoning.
 - **Alert Builder** — watch rules (AQI threshold + condition profile) evaluated by a
-  15-minute Vercel Cron; trigger history in the UI. Email/SMS is architecture-stubbed,
+  scheduled Vercel Cron refresh (daily on Hobby, every 15 min on Pro); trigger history in the UI. Email/SMS is architecture-stubbed,
   intentionally not enabled.
 - **Clinic Mode** — printable, prevention-focused resident handout (English/Spanish),
   condition-aware but never diagnostic; data status printed on the handout.
@@ -45,7 +45,7 @@ Browser ──> Next.js route handlers (/api/*) ──> lib/ domain modules ─�
                  │                                   ├── scoring engine
                  │                                   └── store: Postgres (Drizzle)
                  │                                             or in-memory fallback
-                 └── Vercel Cron (15 min): refresh cache, evaluate watch rules
+                 └── Vercel Cron (daily; 15-min on Pro): refresh + watch rules
 ```
 
 The browser never calls external APIs. Every fetch is cached (10 min for current air
@@ -103,7 +103,7 @@ npm run lint && npm run typecheck
 ## Deploy to Vercel
 
 1. Import the repo in Vercel (framework auto-detected; `vercel.json` adds the
-   15-minute cron for `/api/cron/refresh`).
+   cron for `/api/cron/refresh` — daily by default; tighten to `*/15 * * * *` on the Pro plan).
 2. Set env vars as available: `DATABASE_URL`, `OPENAI_API_KEY`, `CRON_SECRET`,
    optionally `AIRNOW_API_KEY`, `NEXT_PUBLIC_MAP_STYLE_URL`.
 3. If using Postgres: `npm run db:push && npm run seed` against the production DB.
