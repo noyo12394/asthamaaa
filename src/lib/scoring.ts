@@ -1,365 +1,227 @@
-import { getCounty, type County, type CountyMetrics } from "./counties";
+/**
+ * PASS transparent scoring engine.
+ *
+ * Every component is 0-100, computed from labeled inputs, and returned with
+ * its own explanation + sources so the UI can render a full audit trail.
+ * The formula is documented for review in SCORING.md and the /methods page;
+ * weights are constants here, not tuned parameters.
+ *
+ * Guardrails encoded here:
+ * - A snapshot AQI is never presented as a regulatory/annual value.
+ * - County-level health burden is population context, not individual risk.
+ * - Fallback data caps confidence labels and adds explicit caveats.
+ */
+import { clampNumber } from "./geo";
+import { monitorConfidenceScore } from "./monitors";
+import { healthBurdenScore, vulnerabilityScore, HEALTH_SOURCE, VULNERABILITY_SOURCE } from "./health";
+import { getCurrentAirQuality } from "./openmeteo";
+import { countyForPoint, COUNTY_SOURCE } from "./counties";
+import type {
+  RiskLevel,
+  RiskScoreResult,
+  ScoreComponent,
+  SusceptibilityProfile,
+} from "./types";
 
-export interface UserProfile {
-  ageGroup: string;
-  conditions: string[];
-  county: string;
+export const WEIGHTS = {
+  exposure: 0.4,
+  healthVulnerability: 0.2,
+  equity: 0.2,
+  susceptibility: 0.2,
+} as const;
+
+/** AQI -> exposure score. Piecewise so 100 AQI (Moderate ceiling) maps to 50. */
+export function exposureFromAqi(aqi: number): number {
+  if (aqi <= 50) return clampNumber(aqi * 0.5, 0, 25);
+  if (aqi <= 100) return 25 + (aqi - 50) * 0.5;
+  if (aqi <= 200) return 50 + (aqi - 100) * 0.35;
+  return clampNumber(85 + (aqi - 200) * 0.05, 85, 100);
 }
-
-export type RiskLevel = "Low" | "Moderate" | "High" | "Very High";
-export type Confidence = "High" | "Medium" | "Low";
-export type ActionLevel = "Routine" | "Caution" | "Reduce Exposure" | "Avoid Exposure";
-export type PollutantStatus =
-  | "good"
-  | "moderate"
-  | "unhealthy-sensitive"
-  | "unhealthy"
-  | "hazardous";
-
-export interface ScoreComponent {
-  /** 0–100 sub-score for this dimension */
-  score: number;
-  /** weighted points this dimension contributes to the overall (components sum to overall) */
-  contribution: number;
-  /** plain-language explanation of the sub-score */
-  detail: string;
-}
-
-export interface PollutantReading {
-  key: string;
-  label: string;
-  /** 0–100 normalized risk for charts */
-  value: number;
-  /** display value with units */
-  display: string;
-  status: PollutantStatus;
-  message: string;
-}
-
-export interface HealthBurdenReading {
-  key: string;
-  label: string;
-  /** raw prevalence % */
-  prevalence: number;
-  /** 0–100 normalized for charts */
-  value: number;
-  level: "low" | "moderate" | "elevated" | "high";
-}
-
-export interface MonitorAssessment {
-  nearestMonitorMiles: number;
-  nearestMonitorName: string;
-  monitorsWithin25mi: number;
-  confidence: Confidence;
-  confidenceNote: string;
-  coverageGap: boolean;
-}
-
-export interface Assessment {
-  county: County;
-  overallScore: number; // 0–100
-  level: RiskLevel;
-  actionLevel: ActionLevel;
-  components: {
-    exposure: ScoreComponent;
-    susceptibility: ScoreComponent;
-    monitorGap: ScoreComponent;
-    healthBurden: ScoreComponent;
-  };
-  topFactor: { key: string; label: string; contribution: number };
-  why: string[];
-  pollutants: PollutantReading[];
-  healthBurden: HealthBurdenReading[];
-  monitor: MonitorAssessment;
-  recommendations: string[];
-  sensitiveConditionCount: number;
-  isSusceptible: boolean;
-}
-
-const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
-const norm = (v: number, lo: number, hi: number) => clamp(((v - lo) / (hi - lo)) * 100);
-
-// Weights — susceptibility, exposure and health burden drive risk; the monitor
-// gap is a small contributor because it flags *uncertainty*, not danger.
-const WEIGHTS = {
-  exposure: 0.3,
-  susceptibility: 0.3,
-  monitorGap: 0.1,
-  healthBurden: 0.3,
-};
-
-const AGE_POINTS: Record<string, number> = {
-  under18: 25,
-  "18-29": 5,
-  "30-49": 10,
-  "50-64": 25,
-  "65plus": 45,
-};
 
 const CONDITION_POINTS: Record<string, number> = {
-  asthma: 18,
-  copd: 20,
-  heart_disease: 18,
-  diabetes: 14,
-  hypertension: 12,
-  obesity: 10,
-  cancer: 14,
-  hypothyroidism: 6,
-  immunocompromised: 18,
-  pregnancy: 14,
+  asthma: 30,
+  copd: 30,
+  "heart-disease": 25,
+  heartdisease: 25,
+  diabetes: 15,
+  pregnancy: 15,
+  hypertension: 10,
 };
 
-function exposureComponent(m: CountyMetrics): ScoreComponent {
-  const pm = norm(m.pm25, 5, 15);
-  const score = clamp(pm * 0.4 + m.no2Index * 0.3 + m.ozoneIndex * 0.2 + m.so2Index * 0.1);
-  const drivers: string[] = [];
-  if (pm >= 60) drivers.push("elevated PM2.5");
-  if (m.no2Index >= 55) drivers.push("traffic-related NO₂");
-  if (m.ozoneIndex >= 58) drivers.push("seasonal ozone");
-  if (m.so2Index >= 45) drivers.push("industrial SO₂");
-  return {
-    score: Math.round(score),
-    contribution: score * WEIGHTS.exposure,
-    detail: drivers.length
-      ? `Driven by ${drivers.join(", ")}.`
-      : "Ambient pollutant levels are relatively moderate for the region.",
-  };
-}
-
-function susceptibilityComponent(profile: UserProfile): ScoreComponent {
-  const agePts = AGE_POINTS[profile.ageGroup] ?? 10;
-  const condPts = profile.conditions
-    .filter((c) => c !== "none")
-    .reduce((s, c) => s + (CONDITION_POINTS[c] ?? 0), 0);
-  const score = clamp(agePts + condPts);
-  const parts: string[] = [];
-  if (agePts >= 25) parts.push("age group with heightened sensitivity");
-  const conds = profile.conditions.filter((c) => c !== "none");
-  if (conds.length) parts.push(`${conds.length} reported condition${conds.length > 1 ? "s" : ""}`);
-  return {
-    score: Math.round(score),
-    contribution: score * WEIGHTS.susceptibility,
-    detail: parts.length
-      ? `Based on ${parts.join(" and ")}.`
-      : "No elevated personal susceptibility factors reported.",
-  };
-}
-
-function monitorComponent(m: CountyMetrics): ScoreComponent {
-  const distPenalty = norm(m.nearestMonitorMiles, 5, 30);
-  const countRelief = (Math.min(m.monitorsWithin25mi, 4) / 4) * 30;
-  const score = clamp(distPenalty - countRelief);
-  return {
-    score: Math.round(score),
-    contribution: score * WEIGHTS.monitorGap,
-    detail:
-      m.nearestMonitorMiles > 20
-        ? `Nearest EPA monitor is ${m.nearestMonitorMiles.toFixed(0)} mi away — large coverage gap increases estimate uncertainty.`
-        : `Nearest EPA monitor is ${m.nearestMonitorMiles.toFixed(1)} mi away with ${m.monitorsWithin25mi} within 25 mi.`,
-  };
-}
-
-function healthBurdenComponent(m: CountyMetrics): ScoreComponent {
-  const asthma = norm(m.asthma, 8, 14);
-  const diabetes = norm(m.diabetes, 7, 14);
-  const heart = norm(m.heartDisease, 4, 7);
-  const copd = norm(m.copd, 4, 8);
-  const obesity = norm(m.obesity, 24, 35);
-  const prevAvg = (asthma + diabetes + heart + copd + obesity) / 5;
-  const score = clamp(prevAvg * 0.6 + m.vulnerabilityIndex * 0.4);
-  return {
-    score: Math.round(score),
-    contribution: score * WEIGHTS.healthBurden,
-    detail:
-      m.vulnerabilityIndex >= 60
-        ? "High community health burden and population vulnerability in this county."
-        : "Community health burden is around or below the state midpoint.",
-  };
-}
-
-function pollutantStatus(value: number): PollutantStatus {
-  if (value < 25) return "good";
-  if (value < 45) return "moderate";
-  if (value < 65) return "unhealthy-sensitive";
-  if (value < 82) return "unhealthy";
-  return "hazardous";
-}
-
-const POLLUTANT_MESSAGES: Record<PollutantStatus, (label: string) => string> = {
-  good: (l) => `${l} levels are within a generally safe range.`,
-  moderate: (l) => `${l} levels are moderate — sensitive individuals should stay aware.`,
-  "unhealthy-sensitive": (l) =>
-    `${l} may affect sensitive groups. Consider limiting prolonged outdoor exertion.`,
-  unhealthy: (l) => `${l} is elevated. Reduce outdoor activity, especially if you are sensitive.`,
-  hazardous: (l) => `${l} is at a hazardous level. Stay indoors and use filtration where possible.`,
-};
-
-function buildPollutants(m: CountyMetrics, susceptible: boolean): PollutantReading[] {
-  // Lower the effective threshold for sensitive users by inflating perceived value.
-  const bump = susceptible ? 1.15 : 1;
-  const pm = clamp(norm(m.pm25, 5, 15) * bump);
-  const readings: Array<Omit<PollutantReading, "status" | "message">> = [
-    { key: "pm25", label: "PM2.5", value: Math.round(pm), display: `${m.pm25.toFixed(1)} µg/m³` },
-    { key: "no2", label: "NO₂", value: Math.round(clamp(m.no2Index * bump)), display: `Index ${m.no2Index}` },
-    { key: "ozone", label: "Ozone", value: Math.round(clamp(m.ozoneIndex * bump)), display: `Index ${m.ozoneIndex}` },
-    { key: "so2", label: "SO₂", value: Math.round(clamp(m.so2Index * bump)), display: `Index ${m.so2Index}` },
-  ];
-  return readings.map((r) => {
-    const status = pollutantStatus(r.value);
-    return { ...r, status, message: POLLUTANT_MESSAGES[status](r.label) };
-  });
-}
-
-function burdenLevel(v: number): HealthBurdenReading["level"] {
-  if (v < 30) return "low";
-  if (v < 55) return "moderate";
-  if (v < 75) return "elevated";
-  return "high";
-}
-
-function buildHealthBurden(m: CountyMetrics): HealthBurdenReading[] {
-  return [
-    { key: "asthma", label: "Asthma", prevalence: m.asthma, value: Math.round(norm(m.asthma, 8, 14)) },
-    { key: "diabetes", label: "Diabetes", prevalence: m.diabetes, value: Math.round(norm(m.diabetes, 7, 14)) },
-    { key: "heart", label: "Heart Disease", prevalence: m.heartDisease, value: Math.round(norm(m.heartDisease, 4, 7)) },
-    { key: "copd", label: "COPD", prevalence: m.copd, value: Math.round(norm(m.copd, 4, 8)) },
-    { key: "obesity", label: "Obesity", prevalence: m.obesity, value: Math.round(norm(m.obesity, 24, 35)) },
-  ].map((r) => ({ ...r, level: burdenLevel(r.value) }));
-}
-
-function monitorAssessment(m: CountyMetrics): MonitorAssessment {
-  let confidence: Confidence;
-  let confidenceNote: string;
-  if (m.nearestMonitorMiles <= 10 && m.monitorsWithin25mi >= 2) {
-    confidence = "High";
-    confidenceNote = "A nearby EPA monitor anchors this estimate with strong certainty.";
-  } else if (m.nearestMonitorMiles <= 20) {
-    confidence = "Medium";
-    confidenceNote = "Estimate blends a moderately distant monitor with county-level context.";
-  } else {
-    confidence = "Low";
-    confidenceNote = "Sparse monitor coverage — risk is inferred from distant monitors and county vulnerability. Treat the level as a flag to investigate, not a precise reading.";
+export function susceptibilityFromProfile(profile: SusceptibilityProfile): {
+  score: number;
+  notes: string[];
+} {
+  let score = 20; // general-population baseline
+  const notes: string[] = [];
+  if (profile.age != null) {
+    if (profile.age >= 65) {
+      score += 25;
+      notes.push("age 65+ increases sensitivity to particle pollution");
+    } else if (profile.age <= 12) {
+      score += 20;
+      notes.push("children breathe more air per body weight");
+    }
   }
-  return {
-    nearestMonitorMiles: m.nearestMonitorMiles,
-    nearestMonitorName: m.nearestMonitorName,
-    monitorsWithin25mi: m.monitorsWithin25mi,
-    confidence,
-    confidenceNote,
-    coverageGap: m.nearestMonitorMiles > 15.5,
-  };
+  for (const raw of profile.conditions) {
+    const key = raw.trim().toLowerCase().replace(/[\s_]/g, "-");
+    const pts = CONDITION_POINTS[key] ?? CONDITION_POINTS[key.replace(/-/g, "")];
+    if (pts) {
+      score += pts;
+      notes.push(`${raw} is aggravated by PM2.5/ozone exposure`);
+    }
+  }
+  return { score: clampNumber(score, 0, 100), notes };
 }
 
-function buildRecommendations(profile: UserProfile, pollutants: PollutantReading[]): string[] {
-  const recs: string[] = [];
-  const conds = profile.conditions.filter((c) => c !== "none");
-  const highExposure = pollutants.some(
-    (p) => p.status === "unhealthy-sensitive" || p.status === "unhealthy" || p.status === "hazardous"
+export function levelForScore(score: number): RiskLevel {
+  if (score < 25) return "Low";
+  if (score < 50) return "Moderate";
+  if (score < 70) return "High";
+  return "Very High";
+}
+
+export async function calculateRiskScore(
+  lat: number,
+  lng: number,
+  profile: SusceptibilityProfile = { conditions: [] }
+): Promise<RiskScoreResult> {
+  const [{ snapshot }, countyHit] = await Promise.all([
+    getCurrentAirQuality(lat, lng),
+    countyForPoint(lat, lng),
+  ]);
+  const county = countyHit?.county ?? null;
+  const caveats: string[] = [];
+
+  // --- Exposure ---
+  const aqi = snapshot.usAqi.value;
+  const exposureScore = aqi != null ? Math.round(exposureFromAqi(aqi)) : 35;
+  if (aqi == null) caveats.push("Current AQI unavailable; exposure assumed mid-range.");
+  if (snapshot.usAqi.source.status === "fallback") {
+    caveats.push(
+      "Air-quality source unreachable — exposure uses a labeled synthetic fallback field, not real conditions."
+    );
+  }
+  const exposure: ScoreComponent = {
+    score: exposureScore,
+    weight: WEIGHTS.exposure,
+    label: "Current exposure",
+    explanation:
+      aqi != null
+        ? `Snapshot US AQI ${aqi} (${snapshot.category ?? "unknown"}), dominant pollutant ${snapshot.dominantPollutant ?? "n/a"}. This is an hourly model snapshot, not a 24-hour regulatory AQI.`
+        : "No current AQI available for this point.",
+    inputs: {
+      usAqi: aqi,
+      pm25_ugm3: snapshot.pm25.value,
+      ozone_ugm3: snapshot.ozone.value,
+      no2_ugm3: snapshot.no2.value,
+      observedAt: snapshot.observedAt,
+    },
+    sources: [snapshot.usAqi.source],
+  };
+
+  // --- Monitor confidence ---
+  const mc = monitorConfidenceScore(lat, lng);
+  const monitorConfidence: ScoreComponent = {
+    score: mc.score,
+    weight: 0, // shown separately; feeds the equity component below
+    label: "Monitor coverage confidence",
+    explanation: mc.nearest
+      ? `Nearest monitor ${mc.nearest.monitor.name} is ${mc.nearest.distanceKm} km away; ${mc.nearest.monitorsWithin25Km} monitor(s) within 25 km (coverage: ${mc.nearest.coverage}). Distance-decay 70% + density 30%.`
+      : "No monitors in the metadata set.",
+    inputs: {
+      nearestDistanceKm: mc.nearest?.distanceKm ?? null,
+      monitorsWithin25Km: mc.nearest?.monitorsWithin25Km ?? null,
+      coverage: mc.nearest?.coverage ?? null,
+    },
+    sources: mc.nearest ? [mc.nearest.source] : [],
+  };
+  if (mc.nearest?.source.status === "fallback") {
+    caveats.push(
+      "Monitor list is a seed fallback (synthetic placements) — run the AirNow ingestion for real EPA site distances."
+    );
+  }
+
+  // --- Health vulnerability (county) ---
+  const hb = county ? healthBurdenScore(county.fips) : { score: null, dominant: null, detail: {} };
+  const healthScore = hb.score ?? 40;
+  if (hb.score == null) caveats.push("No county health indicators found; mid-range assumed.");
+  const healthVulnerability: ScoreComponent = {
+    score: healthScore,
+    weight: WEIGHTS.healthVulnerability,
+    label: "Community health burden",
+    explanation: county
+      ? `County-level chronic-condition prevalence for ${county.name}, ${county.state} normalized against high-burden reference ceilings; heaviest contributor: ${hb.dominant ?? "n/a"}. Population context — NOT an individual diagnosis.`
+      : "Point could not be matched to a US county.",
+    inputs: { countyFips: county?.fips ?? null, ...hb.detail },
+    sources: [HEALTH_SOURCE, COUNTY_SOURCE],
+  };
+  if (HEALTH_SOURCE.status === "fallback") {
+    caveats.push("County health values are labeled fallback estimates, not CDC PLACES data.");
+  }
+
+  // --- Equity: vulnerability × weak monitoring ---
+  const vs = county ? vulnerabilityScore(county.fips) : { score: null, svi: null };
+  const vulnScore = vs.score ?? 40;
+  const coverageGap = 100 - mc.score;
+  const equityScore = Math.round(0.6 * vulnScore + 0.4 * coverageGap);
+  const equity: ScoreComponent = {
+    score: equityScore,
+    weight: WEIGHTS.equity,
+    label: "Equity burden",
+    explanation: `Social vulnerability (${vulnScore}/100${vs.svi != null ? `, SVI percentile ${vs.svi}` : ""}) weighted 60% + monitoring coverage gap (${coverageGap}/100) weighted 40%. High values flag vulnerable communities with weak observational coverage.`,
+    inputs: { vulnerabilityScore: vulnScore, sviPercentile: vs.svi, coverageGap },
+    sources: [VULNERABILITY_SOURCE],
+  };
+  if (VULNERABILITY_SOURCE.status === "fallback") {
+    caveats.push("Vulnerability values are labeled fallback estimates, not CDC/ATSDR SVI data.");
+  }
+
+  // --- Susceptibility (user profile) ---
+  const sus = susceptibilityFromProfile(profile);
+  const susceptibility: ScoreComponent = {
+    score: sus.score,
+    weight: WEIGHTS.susceptibility,
+    label: "Personal susceptibility",
+    explanation:
+      profile.conditions.length || profile.age != null
+        ? `Profile-based sensitivity (age ${profile.age ?? "unspecified"}; conditions: ${profile.conditions.join(", ") || "none"}). ${sus.notes.join("; ")}. Prevention-focused weighting, not a medical assessment.`
+        : "No susceptibility profile provided — general-population baseline of 20 used.",
+    inputs: { age: profile.age ?? null, conditions: profile.conditions.join(", ") || null },
+    sources: [],
+  };
+
+  const finalScore = Math.round(
+    exposure.score * WEIGHTS.exposure +
+      healthVulnerability.score * WEIGHTS.healthVulnerability +
+      equity.score * WEIGHTS.equity +
+      susceptibility.score * WEIGHTS.susceptibility
   );
-  const lowerThreshold =
-    profile.ageGroup === "65plus" ||
-    profile.ageGroup === "under18" ||
-    conds.includes("pregnancy") ||
-    conds.includes("immunocompromised");
+  const level = levelForScore(finalScore);
 
-  if (conds.includes("asthma") || conds.includes("copd")) {
-    recs.push(
-      "Asthma/COPD: avoid outdoor exertion on high PM2.5 or ozone days, keep your rescue inhaler accessible, and check the daily AQI before activity."
-    );
-  }
-  if (conds.includes("heart_disease")) {
-    recs.push(
-      "Heart disease: avoid heavy exertion during high-pollution periods; PM2.5 spikes are linked to cardiovascular events."
-    );
-  }
-  if (conds.includes("diabetes") || conds.includes("obesity")) {
-    recs.push(
-      "Diabetes/obesity: take extra caution combining heat and poor air quality; stay hydrated and limit midday outdoor activity."
-    );
-  }
-  if (lowerThreshold) {
-    recs.push(
-      "Your group warrants a lower alert threshold — act on 'Moderate' air quality the way others would act on 'Unhealthy'."
-    );
-  }
-  if (highExposure && conds.length) {
-    recs.push(
-      "Given your conditions and current local air quality, consider discussing a preventive plan with your healthcare provider before symptoms appear."
-    );
-  }
-  if (!recs.length) {
-    recs.push(
-      "Your current risk profile is low. Keep monitoring local air quality and maintain routine preventive checkups."
-    );
-  }
-  return recs;
-}
-
-function actionLevelFor(level: RiskLevel): ActionLevel {
-  switch (level) {
-    case "Low": return "Routine";
-    case "Moderate": return "Caution";
-    case "High": return "Reduce Exposure";
-    case "Very High": return "Avoid Exposure";
-  }
-}
-
-export function assess(profile: UserProfile): Assessment | null {
-  const county = getCounty(profile.county);
-  if (!county) return null;
-  const m = county.metrics;
-
-  const exposure = exposureComponent(m);
-  const susceptibility = susceptibilityComponent(profile);
-  const monitorGap = monitorComponent(m);
-  const healthBurden = healthBurdenComponent(m);
-
-  const overallScore = Math.round(
-    exposure.contribution + susceptibility.contribution + monitorGap.contribution + healthBurden.contribution
+  caveats.push(
+    "Scores combine snapshot conditions with long-vintage population data; they prioritize attention, they do not measure personal dose."
   );
 
-  let level: RiskLevel;
-  if (overallScore < 25) level = "Low";
-  else if (overallScore < 45) level = "Moderate";
-  else if (overallScore < 65) level = "High";
-  else level = "Very High";
-
-  const factorList = [
-    { key: "exposure", label: "Air pollution exposure", contribution: exposure.contribution },
-    { key: "susceptibility", label: "Personal susceptibility", contribution: susceptibility.contribution },
-    { key: "healthBurden", label: "County health burden", contribution: healthBurden.contribution },
-    { key: "monitorGap", label: "Monitor coverage gap", contribution: monitorGap.contribution },
-  ];
-  const topFactor = factorList.reduce((a, b) => (b.contribution > a.contribution ? b : a));
-
-  const sensitiveConditionCount = profile.conditions.filter((c) => c !== "none").length;
-  const isSusceptible = susceptibility.score >= 25;
-
-  const pollutants = buildPollutants(m, isSusceptible);
-  const monitor = monitorAssessment(m);
-
-  const why: string[] = [
-    `${topFactor.label} is the largest contributor to your ${level.toLowerCase()} risk.`,
-    exposure.detail,
-    susceptibility.detail,
-    monitor.confidence === "Low"
-      ? "Monitor coverage here is sparse, so the estimate carries higher uncertainty."
-      : `Monitor coverage is adequate (${monitor.confidence.toLowerCase()} confidence).`,
-  ];
+  const explanation =
+    `${level} alert priority (${finalScore}/100). ` +
+    `Exposure ${exposure.score}/100 × ${WEIGHTS.exposure}, community health ${healthVulnerability.score}/100 × ${WEIGHTS.healthVulnerability}, ` +
+    `equity ${equity.score}/100 × ${WEIGHTS.equity}, susceptibility ${susceptibility.score}/100 × ${WEIGHTS.susceptibility}. ` +
+    `Monitor coverage confidence is reported separately at ${monitorConfidence.score}/100 and raises the equity term when coverage is weak.`;
 
   return {
-    county,
-    overallScore,
+    lat,
+    lng,
+    countyFips: county?.fips ?? null,
+    exposure,
+    monitorConfidence,
+    healthVulnerability,
+    equity,
+    susceptibility,
+    finalScore,
     level,
-    actionLevel: actionLevelFor(level),
-    components: { exposure, susceptibility, monitorGap, healthBurden },
-    topFactor,
-    why,
-    pollutants,
-    healthBurden: buildHealthBurden(m),
-    monitor,
-    recommendations: buildRecommendations(profile, pollutants),
-    sensitiveConditionCount,
-    isSusceptible,
+    explanation,
+    caveats,
+    calculatedAt: new Date().toISOString(),
   };
 }

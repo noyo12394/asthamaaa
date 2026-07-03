@@ -1,24 +1,88 @@
 @import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
 
-:root {
-  --background: #f8fafc;
-  --foreground: #1e293b;
-  --primary: #1e40af;
-  --primary-light: #3b82f6;
-  --danger: #dc2626;
-  --warning: #f59e0b;
-  --success: #16a34a;
+/*
+ * PASS Equity Atlas design tokens.
+ * Muted, academic/public-health palette: paper surfaces, ink text, one
+ * restrained blue accent. EPA AQI category colors are reserved for the
+ * air-quality domain scale only.
+ */
+@theme {
+  --color-paper: #f4f4f2;
+  --color-surface: #fcfcfb;
+  --color-surface-2: #f0efec;
+  --color-ink: #14161a;
+  --color-ink-2: #52514e;
+  --color-ink-3: #898781;
+  --color-hairline: #e1e0d9;
+  --color-baseline: #c3c2b7;
+  --color-accent: #1c5cab;
+  --color-accent-soft: #e3edf9;
+  --color-good: #0ca30c;
+  --color-warning: #b97b00;
+  --color-serious: #c05621;
+  --color-critical: #d03b3b;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo, monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Dense panel type scale */
+.panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hairline-bordered panel */
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-hairline);
+}
+
+/* Scrollbars that suit a dense tool */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-baseline) transparent;
+}
+
+/* MapLibre chrome adjustments */
+.maplibregl-ctrl-attrib {
+  font-size: 10px;
+}
+.maplibregl-popup-content {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  border: 1px solid var(--color-hairline);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(20, 22, 26, 0.12);
+  padding: 10px 12px;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
 }

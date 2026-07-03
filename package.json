@@ -1,31 +1,46 @@
 {
-  "name": "asthamaaa",
-  "version": "0.1.0",
+  "name": "pass-equity-atlas",
+  "version": "1.0.0",
   "private": true,
+  "description": "PASS Equity Atlas — environmental health intelligence platform: live air quality, monitor coverage confidence, health vulnerability, and equity-aware alert priority with a source trail behind every number.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint src scripts tests",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "seed": "tsx scripts/seed.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "ingest:counties": "node scripts/ingest-counties.mjs",
+    "ingest:monitors": "node scripts/ingest-monitors.mjs",
+    "ingest:health": "node scripts/ingest-health.mjs",
+    "ingest:vulnerability": "node scripts/ingest-vulnerability.mjs",
+    "ingest": "npm run ingest:counties && npm run ingest:monitors && npm run ingest:health && npm run ingest:vulnerability"
   },
   "dependencies": {
-    "leaflet": "^1.9.4",
+    "drizzle-orm": "^0.44.2",
     "lucide-react": "^1.22.0",
+    "maplibre-gl": "^5.6.0",
     "next": "16.2.9",
+    "postgres": "^3.4.7",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "react-leaflet": "^5.0.0",
-    "recharts": "^3.9.0"
+    "zod": "^3.25.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/leaflet": "^1.9.21",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "^4.19.0",
+    "typescript": "^5",
+    "vitest": "^3.2.0"
   }
 }
