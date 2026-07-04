@@ -35,7 +35,22 @@ interface ResolveData {
     coverage: string;
     source: SourceRef;
   } | null;
+  sparsity: {
+    class: "dense" | "moderate" | "sparse" | "remote";
+    nearestMonitorKm: number | null;
+    dataBasis: string;
+    plainLanguage: string;
+    confidenceForecast: string;
+    metadataStatus: string;
+  } | null;
 }
+
+const SPARSITY_STYLE: Record<string, string> = {
+  dense: "bg-[#d2ecec] text-[#125858]",
+  moderate: "bg-[#e0eeee] text-[#1d6363]",
+  sparse: "bg-[#faf0cd] text-[#8a6d00]",
+  remote: "bg-[#fbe3dc] text-[#a03416]",
+};
 
 interface CountyProfile {
   county: { fips: string; name: string; state: string };
@@ -299,6 +314,108 @@ export default function Inspector({
                 medical assessment.
               </p>
             </Section>
+
+            {aq && risk && resolve && (
+              <Section title="Personal exposure story">
+                <p className="text-[13px] leading-relaxed">
+                  Today this place matters{" "}
+                  {profile.conditions.length > 0
+                    ? `for someone managing ${profile.conditions.join(", ")}`
+                    : "for air-sensitive residents"}{" "}
+                  because:
+                </p>
+                <ul className="mt-2 space-y-1.5">
+                  <li>
+                    <details>
+                      <summary className="cursor-pointer text-[13px]">
+                        ▸ PM2.5 is{" "}
+                        <span className="font-semibold">
+                          {aq.category?.toLowerCase() ?? "unknown"}
+                        </span>
+                      </summary>
+                      <div className="mt-1 border-l-2 border-hairline pl-2 text-[11px] text-ink-2">
+                        <p className="tabular">
+                          PM2.5 {aq.pm25.value ?? "—"} µg/m³ · US AQI {aq.usAqi.value ?? "—"} —
+                          same value used in the researcher score below.
+                        </p>
+                        <div className="mt-1">
+                          <SourceLine source={aq.usAqi.source} />
+                        </div>
+                      </div>
+                    </details>
+                  </li>
+                  {resolve.sparsity && (
+                    <li>
+                      <details>
+                        <summary className="cursor-pointer text-[13px]">
+                          ▸ monitor confidence is{" "}
+                          <span className="font-semibold">{resolve.sparsity.class}</span>
+                        </summary>
+                        <div className="mt-1 border-l-2 border-hairline pl-2 text-[11px] text-ink-2">
+                          <p className="tabular">
+                            Nearest monitor {resolve.sparsity.nearestMonitorKm ?? "?"} km —{" "}
+                            {resolve.sparsity.dataBasis === "ground-anchored"
+                              ? "ground-monitor anchored"
+                              : "model/satellite estimate only"}
+                            . Metadata: {resolve.sparsity.metadataStatus}.
+                          </p>
+                          <p className="mt-0.5 text-ink-3">{resolve.sparsity.plainLanguage}</p>
+                        </div>
+                      </details>
+                    </li>
+                  )}
+                  <li>
+                    <details>
+                      <summary className="cursor-pointer text-[13px]">
+                        ▸ community{" "}
+                        {profile.conditions[0] ? `${profile.conditions[0]} ` : "health "}burden is{" "}
+                        <span className="font-semibold">
+                          {risk.healthVulnerability.score >= 60
+                            ? "high"
+                            : risk.healthVulnerability.score >= 40
+                              ? "moderate"
+                              : "low"}
+                        </span>{" "}
+                        here
+                      </summary>
+                      <div className="mt-1 border-l-2 border-hairline pl-2 text-[11px] text-ink-2">
+                        <p className="tabular">
+                          County burden score {risk.healthVulnerability.score}/100 — the exact
+                          component the researcher score uses. Population context, not a personal
+                          prediction.
+                        </p>
+                        {risk.healthVulnerability.sources[0] && (
+                          <div className="mt-1">
+                            <SourceLine source={risk.healthVulnerability.sources[0]} />
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  </li>
+                </ul>
+                <p className="mt-2 text-[10px] leading-snug text-ink-3">
+                  Same numbers as the score below — plain-language wrapper, not a separate
+                  calculation.
+                </p>
+              </Section>
+            )}
+
+            {resolve?.sparsity && (
+              <Section title="Why we’re unsure here">
+                <span
+                  className={`inline-block rounded-sm px-2 py-0.5 text-xs font-semibold ${SPARSITY_STYLE[resolve.sparsity.class]}`}
+                >
+                  {resolve.sparsity.class} coverage
+                </span>
+                <p className="mt-1.5 text-xs leading-snug text-ink-2">
+                  {resolve.sparsity.plainLanguage}
+                </p>
+                <p className="mt-1.5 text-[11px] leading-snug text-ink-3">
+                  <span className="font-medium text-ink-2">When does this improve? </span>
+                  {resolve.sparsity.confidenceForecast}
+                </p>
+              </Section>
+            )}
 
             {risk && (
               <Section title="Alert priority">

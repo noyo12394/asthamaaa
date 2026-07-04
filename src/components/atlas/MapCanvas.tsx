@@ -209,6 +209,7 @@ export default function MapCanvas({
         const srcs = [
           "aqi-cells",
           "alert-cells",
+          "uncertainty-cells",
           "county-vulnerability",
           "county-equity",
           "county-lines",
@@ -359,6 +360,39 @@ export default function MapCanvas({
             "fill-extrusion-height": 0,
             "fill-extrusion-opacity": 0.5,
           },
+        });
+
+        // ---- "why we're unsure" sparsity cells ----
+        map.addLayer({
+          id: "uncertainty-fill",
+          type: "fill",
+          source: "uncertainty-cells",
+          layout: { visibility: "none" },
+          paint: {
+            "fill-color": [
+              "match", ["get", "class"],
+              "dense", "#d2ecec",
+              "moderate", "#9ed4d4",
+              "sparse", "#f2c94c",
+              "remote", "#d0492f",
+              "#c9c8c1",
+            ] as maplibregl.ExpressionSpecification,
+            "fill-opacity": [
+              "match", ["get", "class"],
+              "dense", 0.15,
+              "moderate", 0.25,
+              "sparse", 0.4,
+              "remote", 0.45,
+              0.2,
+            ] as maplibregl.ExpressionSpecification,
+          },
+        });
+        map.addLayer({
+          id: "uncertainty-line",
+          type: "line",
+          source: "uncertainty-cells",
+          layout: { visibility: "none" },
+          paint: { "line-color": "#fcfcfb", "line-width": 0.5, "line-opacity": 0.4 },
         });
 
         // ---- monitor towers + pins ----
@@ -515,6 +549,7 @@ export default function MapCanvas({
       equity: ["equity-fill", "equity-line"],
       alert: ["alert-fill"],
       reports: ["report-pin"],
+      uncertainty: ["uncertainty-fill", "uncertainty-line"],
     };
     for (const [layer, ids] of Object.entries(vis)) {
       const on = activeLayers.includes(layer as LayerId);

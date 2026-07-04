@@ -19,14 +19,41 @@ Live: https://pass-equity-atlas.vercel.app
   coverage rating, county health & vulnerability profile, transparent 0–100 alert
   priority with per-component bars, and a full **source trail** tab (source, status,
   vintage, confidence, backend fetch ledger).
+- **Sensor Placement Simulator** (flagship) — click the map to drop up to three
+  hypothetical temporary monitors; see before/after monitor-sparsity class
+  (dense/moderate/sparse/remote), area upgraded out of sparse/remote, and estimated
+  population newly served — ranked by people-served-per-mile-of-coverage-gained.
+  Explicitly a coverage-geometry simulation, never a pollution prediction.
+- **Why We're Unsure layer** — uncertainty as a first-class map layer: per-cell
+  monitor-sparsity class with its own legend, plus a per-location plain-language
+  read-out and a "when does confidence improve?" forecast.
+- **Personal Exposure Story** — plain-language card ("today this place matters for
+  you because…") whose clauses expand to the exact numbers and sources the
+  researcher-facing score uses — same values, no separate simplified math.
+- **Equity Lens** — three factual panels (who has less monitoring, who has higher
+  exposure, who carries the health burden) by county poverty terciles, plus a
+  cross-state comparison across the PASS Mid-Atlantic region. Structural framing,
+  no causal overreach.
+- **7-Day Outlook** — weekly calendar with one row per susceptibility group
+  (asthma, COPD, heart disease, children, 65+), each with its own thresholds.
+- **Outcome Watchlist** — county health-outcome signals to watch; syndromic
+  ER-visit rows are flagged "not yet live" rather than faked.
 - **Compare Mode** — 2–5 locations side by side with data-status flags.
 - **Monitor Gaps** — ranks where temporary low-cost sensors would help most
   (coverage gap × vulnerability), with "why this helps" reasoning.
+- **Public confidence API** — `GET /api/confidence?lat=&lng=` exposes the
+  sparsity-class/confidence calculation (CORS-open) so other tools can build on it.
+- **Text/SMS path** — `GET /api/text-card?q=<zip or place>&condition=&language=`
+  returns the Clinic Mode card as plain text for low-bandwidth field use.
 - **Alert Builder** — watch rules (AQI threshold + condition profile) evaluated by a
   scheduled Vercel Cron refresh (daily on Hobby, every 15 min on Pro); trigger history in the UI. Email/SMS is architecture-stubbed,
   intentionally not enabled.
-- **Clinic Mode** — printable, prevention-focused resident handout (English/Spanish),
-  condition-aware but never diagnostic; data status printed on the handout.
+- **Clinic Mode** (flagship) — a visually distinct plain-language mode: printable
+  patient handout with the monitor-confidence situation explained practically,
+  2–3 condition-specific actions, doctor-conversation prompts, and full Spanish
+  generation (same numbers, translated narrative). Narrative is generated at
+  request time from live numbers via LLM when `OPENAI_API_KEY` is set; otherwise
+  reviewed bilingual templates (labeled either way).
 - **Methods** — the full scoring formula, source list, and interpretation limits,
   written for professor/health-department review.
 - **Exposure Navigator** — an agent with 11 backend tools (air quality, county

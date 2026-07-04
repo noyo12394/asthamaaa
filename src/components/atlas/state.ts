@@ -8,7 +8,8 @@ export type LayerId =
   | "vulnerability"
   | "equity"
   | "alert"
-  | "reports";
+  | "reports"
+  | "uncertainty";
 
 export interface LayerInfo {
   id: LayerId;
@@ -20,6 +21,7 @@ export const LAYERS: LayerInfo[] = [
   { id: "aqi", label: "Current AQI surface", description: "Hex cells colored by snapshot US AQI (EPA scale); extruded in 3D." },
   { id: "plume", label: "PM2.5 plume", description: "Animated heat surface weighted by PM2.5 concentration." },
   { id: "monitors", label: "Monitors", description: "Air-quality monitor sites as pins and towers. Check metadata status." },
+  { id: "uncertainty", label: "Why we're unsure", description: "Monitor-sparsity class per cell: dense/moderate = ground-anchored, sparse/remote = model/satellite estimate only." },
   { id: "coverage", label: "Monitor confidence", description: "10 km (good) and 25 km (partial) coverage rings around monitors." },
   { id: "vulnerability", label: "Health vulnerability", description: "County extrusion height and blue ramp = composite vulnerability." },
   { id: "equity", label: "Equity burden", description: "Violet counties = high vulnerability × weak monitor coverage." },

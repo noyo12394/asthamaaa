@@ -63,6 +63,27 @@ siting standard. Confidence deliberately does not scale the final score; it feed
 the equity term and is displayed beside every result so low observational
 confidence stays visible.
 
+### Monitor-sparsity classes (Why We're Unsure)
+
+The same nearest-monitor distance also drives the sparsity classification used
+by the uncertainty layer, the simulator, and the public `/api/confidence`
+endpoint:
+
+| class | distance to nearest active monitor | data basis |
+|---|---|---|
+| dense | < 10 km | ground-anchored |
+| moderate | 10–25 km | ground-anchored |
+| sparse | 25–50 km | model/satellite estimate |
+| remote | ≥ 50 km | model/satellite estimate |
+
+### Weekly outlook thresholds
+
+The 7-day view flags a day per susceptibility group when the day's **peak
+hourly snapshot AQI** crosses group thresholds (caution/high): asthma & COPD
+65/100, children & adults 65+ 75/110, heart disease 80/125, general 100/150.
+Sensitive groups deliberately flag earlier than the generic AQI categories;
+heuristic planning values, not clinical cutoffs.
+
 ## Final score
 
 ```

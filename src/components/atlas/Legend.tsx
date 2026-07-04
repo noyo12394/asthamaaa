@@ -51,6 +51,31 @@ export default function Legend({
           </ul>
         </div>
       )}
+      {activeLayers.includes("uncertainty") && (
+        <div>
+          <span className="panel-title">Why we’re unsure</span>
+          <ul className="mt-0.5 space-y-0.5">
+            {(
+              [
+                ["dense", "#d2ecec", "monitor <10 km — ground-anchored"],
+                ["moderate", "#9ed4d4", "10–25 km — partially anchored"],
+                ["sparse", "#f2c94c", "25–50 km — model/satellite estimate"],
+                ["remote", "#d0492f", "≥50 km — estimate only, no anchor"],
+              ] as const
+            ).map(([label, color, desc]) => (
+              <li key={label} className="flex items-center gap-1.5 text-[10px]">
+                <span className="h-2.5 w-2.5 rounded-[2px]" style={{ background: color, opacity: 0.8 }} />
+                <span className="text-ink-2">
+                  <span className="font-medium">{label}</span> — {desc}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-[9px] leading-snug text-ink-3">
+            County health data everywhere is population burden, not personal diagnosis.
+          </p>
+        </div>
+      )}
       {activeLayers.includes("vulnerability") && (
         <div>
           <span className="panel-title">Health vulnerability</span>

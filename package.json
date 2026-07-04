@@ -18,7 +18,8 @@
     "ingest:monitors": "node scripts/ingest-monitors.mjs",
     "ingest:health": "node scripts/ingest-health.mjs",
     "ingest:vulnerability": "node scripts/ingest-vulnerability.mjs",
-    "ingest": "npm run ingest:counties && npm run ingest:monitors && npm run ingest:health && npm run ingest:vulnerability"
+    "ingest:population": "node scripts/ingest-population.mjs",
+    "ingest": "npm run ingest:counties && npm run ingest:monitors && npm run ingest:health && npm run ingest:vulnerability && npm run ingest:population"
   },
   "dependencies": {
     "drizzle-orm": "^0.44.2",

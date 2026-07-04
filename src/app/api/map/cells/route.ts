@@ -18,7 +18,16 @@ import { bad, handleError, ok, parseQuery } from "@/lib/api";
 
 const schema = z.object({
   bbox: z.string(), // west,south,east,north
-  layer: z.enum(["aqi", "monitors", "coverage", "vulnerability", "equity", "alert", "reports"]),
+  layer: z.enum([
+    "aqi",
+    "monitors",
+    "coverage",
+    "vulnerability",
+    "equity",
+    "alert",
+    "reports",
+    "uncertainty",
+  ]),
   cellKm: z.coerce.number().min(1).max(50).optional(),
 });
 
@@ -228,6 +237,41 @@ export async function GET(req: NextRequest) {
           };
         });
         return ok(hit.value);
+      }
+
+      case "uncertainty": {
+        // "Why we're unsure": monitor-sparsity class per cell, its own layer
+        // with its own legend — uncertainty as a first-class citizen. Pure
+        // distance math, so the grid can be denser than the AQI batch layer.
+        const { classifySparsity } = await import("@/lib/sparsity");
+        const cellKm = query.cellKm ?? Math.max(3, autoCellKm(bbox.east - bbox.west) * 0.8);
+        let cells = hexGrid(bbox, cellKm);
+        if (cells.length > 140) {
+          const scale = Math.sqrt(cells.length / 140);
+          cells = hexGrid(bbox, Math.min(50, cellKm * scale * 1.05));
+        }
+        return ok({
+          type: "FeatureCollection",
+          features: cells.map((c) => {
+            const s = classifySparsity(c.center.lat, c.center.lng);
+            return {
+              type: "Feature" as const,
+              id: c.id,
+              properties: {
+                class: s.class,
+                nearestKm: s.nearestMonitorKm,
+                dataBasis: s.dataBasis,
+              },
+              geometry: { type: "Polygon" as const, coordinates: [c.polygon] },
+            };
+          }),
+          meta: {
+            layer: "uncertainty",
+            cellKm,
+            source: MONITOR_SOURCE,
+            note: "Class by distance to nearest active monitor: dense <10 km, moderate <25, sparse <50, remote ≥50. Sparse/remote areas rely on model/satellite estimates, not ground truth. County health data everywhere is population burden, not individual diagnosis.",
+          },
+        });
       }
 
       case "reports": {

@@ -24,9 +24,19 @@ export async function GET() {
   }
 }
 
+// Anonymous rate limit: 5 reports per user per 10 minutes (per instance).
+const recentByUser = new Map<string, number[]>();
+
 export async function POST(req: NextRequest) {
   try {
     const { userId, isNew } = getUserId(req);
+    const now = Date.now();
+    const recent = (recentByUser.get(userId) ?? []).filter((t) => now - t < 10 * 60 * 1000);
+    if (recent.length >= 5) {
+      return bad("Rate limit: at most 5 community reports per 10 minutes.", 429);
+    }
+    recent.push(now);
+    recentByUser.set(userId, recent);
     const body = createSchema.safeParse(await req.json());
     if (!body.success) return bad(body.error.issues[0].message);
     const report = await addCommunityReport({

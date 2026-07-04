@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { countyForPoint, COUNTY_SOURCE } from "@/lib/counties";
 import { nearestMonitor } from "@/lib/monitors";
+import { classifySparsity } from "@/lib/sparsity";
 import { handleError, latLngSchema, ok, parseQuery } from "@/lib/api";
 
 export async function GET(req: NextRequest) {
@@ -26,6 +27,17 @@ export async function GET(req: NextRequest) {
           }
         : null,
       nearestMonitor: nearest,
+      sparsity: (() => {
+        const s = classifySparsity(query.lat, query.lng);
+        return {
+          class: s.class,
+          nearestMonitorKm: s.nearestMonitorKm,
+          dataBasis: s.dataBasis,
+          plainLanguage: s.plainLanguage,
+          confidenceForecast: s.confidenceForecast,
+          metadataStatus: s.metadataStatus,
+        };
+      })(),
     });
   } catch (err) {
     return handleError(err);
