@@ -10,6 +10,7 @@ import { useState } from "react";
 import SiteHeader from "@/components/SiteHeader";
 import SimMap, { type SimCandidate } from "@/components/sim/SimMap";
 import SearchBox from "@/components/ui/SearchBox";
+import AgentDock from "@/components/atlas/AgentDock";
 import { api } from "@/lib/client/api";
 import { Spinner } from "@/components/ui/bits";
 import Link from "next/link";
@@ -47,6 +48,7 @@ export default function SimulatorPage() {
   const [result, setResult] = useState<SimResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [center, setCenter] = useState<[number, number] | null>(null);
+  const [agentOpen, setAgentOpen] = useState(false);
 
   async function runSim(cands: SimCandidate[]) {
     if (cands.length === 0) {
@@ -102,6 +104,17 @@ export default function SimulatorPage() {
           <div className="panel absolute bottom-8 left-2 max-w-[240px] rounded-sm p-2 text-[11px] leading-snug text-ink-2">
             Click anywhere to drop a hypothetical temporary monitor (up to 3). Teal rings are
             existing coverage; dashed rings are your candidates’ 25 km reach.
+          </div>
+          <div className="absolute right-2 bottom-8 z-10">
+            <AgentDock
+              location={
+                candidates.length > 0
+                  ? { lat: candidates[0].lat, lng: candidates[0].lng, label: candidates[0].label }
+                  : null
+              }
+              open={agentOpen}
+              onToggle={() => setAgentOpen((o) => !o)}
+            />
           </div>
         </div>
 
