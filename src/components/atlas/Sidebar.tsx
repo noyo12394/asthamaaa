@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client/api";
 import { StatusBadge, Section, Spinner } from "@/components/ui/bits";
+import { formatDistance, type DistanceUnit } from "@/lib/distance";
 import { LAYERS, type LayerId } from "./state";
 import type { SavedLocation } from "@/lib/types";
 
@@ -20,9 +21,18 @@ interface Props {
   onToggleLayer: (id: LayerId) => void;
   onPickPlace: (lat: number, lng: number, label: string) => void;
   selected: { lat: number; lng: number; label: string | null } | null;
+  distanceUnit: DistanceUnit;
+  onDistanceUnitChange: (unit: DistanceUnit) => void;
 }
 
-export default function Sidebar({ activeLayers, onToggleLayer, onPickPlace, selected }: Props) {
+export default function Sidebar({
+  activeLayers,
+  onToggleLayer,
+  onPickPlace,
+  selected,
+  distanceUnit,
+  onDistanceUnitChange,
+}: Props) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<GeocodeResult[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -54,6 +64,10 @@ export default function Sidebar({ activeLayers, onToggleLayer, onPickPlace, sele
   }, [q]);
 
   const shownResults = q.trim().length >= 2 ? results : null;
+  const layerDescription = (description: string) =>
+    description
+      .replace("10 km", formatDistance(10, distanceUnit, 0))
+      .replace("25 km", formatDistance(25, distanceUnit, 0));
 
   async function saveCurrent() {
     if (!selected) return;
@@ -162,6 +176,29 @@ export default function Sidebar({ activeLayers, onToggleLayer, onPickPlace, sele
         )}
       </Section>
 
+      <Section title="Distance units">
+        <div className="grid grid-cols-2 gap-px border border-hairline bg-surface-2 p-0.5 text-xs">
+          {(["km", "mi"] as const).map((unit) => (
+            <button
+              key={unit}
+              type="button"
+              onClick={() => onDistanceUnitChange(unit)}
+              className={`px-2 py-1.5 font-medium ${
+                distanceUnit === unit
+                  ? "bg-surface text-accent shadow-sm"
+                  : "text-ink-3 hover:bg-surface hover:text-ink-2"
+              }`}
+              aria-pressed={distanceUnit === unit}
+            >
+              {unit === "km" ? "Kilometers" : "Miles"}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[11px] leading-snug text-ink-3">
+          Display only. Monitor confidence still uses the documented 10/25 km method.
+        </p>
+      </Section>
+
       <Section title="Map layers">
         <ul className="space-y-2">
           {LAYERS.map((layer) => (
@@ -176,7 +213,7 @@ export default function Sidebar({ activeLayers, onToggleLayer, onPickPlace, sele
                 <span>
                   <span className="block text-sm leading-tight">{layer.label}</span>
                   <span className="block text-[11px] leading-snug text-ink-3">
-                    {layer.description}
+                    {layerDescription(layer.description)}
                   </span>
                 </span>
               </label>

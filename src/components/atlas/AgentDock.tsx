@@ -7,6 +7,7 @@
  */
 import { useRef, useState } from "react";
 import { api } from "@/lib/client/api";
+import type { DistanceUnit } from "@/lib/distance";
 import { Spinner } from "@/components/ui/bits";
 
 interface ToolCall {
@@ -34,11 +35,14 @@ export default function AgentDock({
   location,
   open,
   onToggle,
+  distanceUnit,
 }: {
   location: { lat: number; lng: number; label: string | null } | null;
   open: boolean;
   onToggle: () => void;
+  distanceUnit?: DistanceUnit;
 }) {
+  const unit = distanceUnit ?? "km";
   const [items, setItems] = useState<ChatItem[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -61,6 +65,7 @@ export default function AgentDock({
         body: JSON.stringify({
           messages: next.map(({ role, content }) => ({ role, content })),
           location: location ? { lat: location.lat, lng: location.lng, label: location.label ?? undefined } : null,
+          distanceUnit: unit,
         }),
       });
       setItems((cur) => [
@@ -96,7 +101,7 @@ export default function AgentDock({
         <div>
           <h3 className="text-sm font-semibold">Exposure Navigator</h3>
           <p className="text-[10px] text-ink-3">
-            Tool-driven analysis — cites sources, never invents data
+            Tool-driven analysis · distances in {unit}
           </p>
         </div>
         <button onClick={onToggle} className="text-ink-3 hover:text-ink" aria-label="Close assistant">

@@ -18,6 +18,7 @@ import { nearestMonitor, monitorConfidenceScore, MONITOR_SOURCE } from "../monit
 import { calculateRiskScore } from "../scoring";
 import { addWatchRule } from "../store";
 import { recentFetches } from "../freshness";
+import type { DistanceUnit } from "../distance";
 
 export interface ToolDef {
   name: string;
@@ -29,6 +30,7 @@ export interface ToolDef {
 export interface ToolContext {
   userId: string;
   location?: { lat: number; lng: number; label?: string } | null;
+  distanceUnit?: DistanceUnit;
 }
 
 const num = (v: unknown): number => {

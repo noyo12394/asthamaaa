@@ -12,6 +12,7 @@ import Timeline from "./Timeline";
 import AgentDock from "./AgentDock";
 import Legend from "./Legend";
 import { api } from "@/lib/client/api";
+import type { DistanceUnit } from "@/lib/distance";
 import type { LayerId, SelectedFeature, SelectedLocation } from "./state";
 
 const DEFAULT_LAYERS: LayerId[] = ["aqi", "monitors", "coverage"];
@@ -29,6 +30,7 @@ export default function AtlasApp() {
     age: "",
     conditions: [],
   });
+  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>("km");
   const [reportOpen, setReportOpen] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<"map" | "inspect" | "layers">("map");
 
@@ -97,6 +99,8 @@ export default function AtlasApp() {
             onToggleLayer={toggleLayer}
             onPickPlace={pickPlace}
             selected={selected}
+            distanceUnit={distanceUnit}
+            onDistanceUnitChange={setDistanceUnit}
           />
         </aside>
 
@@ -149,12 +153,17 @@ export default function AtlasApp() {
 
           {/* legend */}
           <div className="absolute bottom-8 left-2">
-            <Legend activeLayers={activeLayers} layerMeta={layerMeta} />
+            <Legend activeLayers={activeLayers} layerMeta={layerMeta} distanceUnit={distanceUnit} />
           </div>
 
           {/* agent dock */}
           <div className="absolute right-2 bottom-8 z-10">
-            <AgentDock location={selected} open={agentOpen} onToggle={() => setAgentOpen((o) => !o)} />
+            <AgentDock
+              location={selected}
+              open={agentOpen}
+              onToggle={() => setAgentOpen((o) => !o)}
+              distanceUnit={distanceUnit}
+            />
           </div>
 
           {/* community report modal */}
@@ -221,7 +230,12 @@ export default function AtlasApp() {
             mobilePanel === "inspect" ? "block" : "hidden"
           }`}
         >
-          <Inspector selected={selected} profile={profile} onProfileChange={setProfile} />
+          <Inspector
+            selected={selected}
+            profile={profile}
+            onProfileChange={setProfile}
+            distanceUnit={distanceUnit}
+          />
         </aside>
       </div>
 

@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client/api";
 import { aqiChip } from "@/lib/client/colors";
+import { formatDistance, type DistanceUnit } from "@/lib/distance";
 import {
   ConfidenceDots,
   LevelChip,
@@ -86,10 +87,12 @@ export default function Inspector({
   selected,
   profile,
   onProfileChange,
+  distanceUnit,
 }: {
   selected: SelectedLocation | null;
   profile: { age: string; conditions: string[] };
   onProfileChange: (p: { age: string; conditions: string[] }) => void;
+  distanceUnit: DistanceUnit;
 }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [main, setMain] = useState<{
@@ -260,9 +263,10 @@ export default function Inspector({
               <Section title="Nearest monitor">
                 <p className="text-sm">{resolve.nearestMonitor.monitor.name}</p>
                 <p className="tabular mt-0.5 text-xs text-ink-2">
-                  {resolve.nearestMonitor.distanceKm} km away ·{" "}
+                  {formatDistance(resolve.nearestMonitor.distanceKm, distanceUnit)} away ·{" "}
                   {resolve.nearestMonitor.monitor.pollutants.join(", ")} ·{" "}
-                  {resolve.nearestMonitor.monitorsWithin25Km} site(s) within 25 km
+                  {resolve.nearestMonitor.monitorsWithin25Km} site(s) within{" "}
+                  {formatDistance(25, distanceUnit, 0)}
                 </p>
                 <p className="mt-1 text-xs">
                   Coverage:{" "}
@@ -353,7 +357,7 @@ export default function Inspector({
                         </summary>
                         <div className="mt-1 border-l-2 border-hairline pl-2 text-[11px] text-ink-2">
                           <p className="tabular">
-                            Nearest monitor {resolve.sparsity.nearestMonitorKm ?? "?"} km —{" "}
+                            Nearest monitor {formatDistance(resolve.sparsity.nearestMonitorKm, distanceUnit)} —{" "}
                             {resolve.sparsity.dataBasis === "ground-anchored"
                               ? "ground-monitor anchored"
                               : "model/satellite estimate only"}
@@ -412,7 +416,9 @@ export default function Inspector({
                 </p>
                 <p className="mt-1.5 text-[11px] leading-snug text-ink-3">
                   <span className="font-medium text-ink-2">When does this improve? </span>
-                  {resolve.sparsity.confidenceForecast}
+                  {resolve.sparsity.confidenceForecast
+                    .replace("~10 km", `~${formatDistance(10, distanceUnit, 0)}`)
+                    .replace("~25 km", `~${formatDistance(25, distanceUnit, 0)}`)}
                 </p>
               </Section>
             )}

@@ -2,6 +2,7 @@
 
 /** Map legend that follows the active layers; shows the data-status badge of the last fetch. */
 import { AQI_BREAKS, ALERT_RAMP, BLUE_RAMP, VIOLET_RAMP } from "@/lib/client/colors";
+import { formatDistance, formatDistanceBand, type DistanceUnit } from "@/lib/distance";
 import { StatusBadge } from "@/components/ui/bits";
 import type { LayerId } from "./state";
 
@@ -24,9 +25,11 @@ function Ramp({ colors, minLabel, maxLabel }: { colors: readonly string[]; minLa
 export default function Legend({
   activeLayers,
   layerMeta,
+  distanceUnit,
 }: {
   activeLayers: LayerId[];
   layerMeta: Partial<Record<LayerId, unknown>>;
+  distanceUnit: DistanceUnit;
 }) {
   if (activeLayers.length === 0) return null;
   const aqiMeta = layerMeta.aqi as { source?: { status?: string } } | undefined;
@@ -57,10 +60,10 @@ export default function Legend({
           <ul className="mt-0.5 space-y-0.5">
             {(
               [
-                ["dense", "#d2ecec", "monitor <10 km — ground-anchored"],
-                ["moderate", "#9ed4d4", "10–25 km — partially anchored"],
-                ["sparse", "#f2c94c", "25–50 km — model/satellite estimate"],
-                ["remote", "#d0492f", "≥50 km — estimate only, no anchor"],
+                ["dense", "#d2ecec", `monitor <${formatDistance(10, distanceUnit, 0)} — ground-anchored`],
+                ["moderate", "#9ed4d4", `${formatDistanceBand(10, 25, distanceUnit)} — partially anchored`],
+                ["sparse", "#f2c94c", `${formatDistanceBand(25, 50, distanceUnit)} — model/satellite estimate`],
+                ["remote", "#d0492f", `≥${formatDistance(50, distanceUnit, 0)} — estimate only, no anchor`],
               ] as const
             ).map(([label, color, desc]) => (
               <li key={label} className="flex items-center gap-1.5 text-[10px]">
@@ -97,7 +100,8 @@ export default function Legend({
       {activeLayers.includes("coverage") && (
         <div className="flex items-center gap-1.5 text-[10px] text-ink-2">
           <span className="h-2.5 w-2.5 rounded-full border border-dashed" style={{ borderColor: "#2d8888", background: "rgba(45,136,136,0.15)" }} />
-          Monitor coverage: solid ≈ 10 km, faint ≈ 25 km
+          Monitor coverage: solid ≈ {formatDistance(10, distanceUnit, 0)}, faint ≈{" "}
+          {formatDistance(25, distanceUnit, 0)}
         </div>
       )}
       {activeLayers.includes("monitors") && (

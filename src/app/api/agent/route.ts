@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { runAgent } from "@/lib/agent/agent";
 import { bad, getUserId, handleError, ok, withUserCookie } from "@/lib/api";
+import { normalizeDistanceUnit } from "@/lib/distance";
 
 const schema = z.object({
   messages: z
@@ -20,6 +21,7 @@ const schema = z.object({
       label: z.string().max(200).optional(),
     })
     .nullish(),
+  distanceUnit: z.enum(["km", "mi"]).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -30,6 +32,7 @@ export async function POST(req: NextRequest) {
     const result = await runAgent(body.data.messages, {
       userId,
       location: body.data.location ?? null,
+      distanceUnit: normalizeDistanceUnit(body.data.distanceUnit),
     });
     return withUserCookie(ok(result), userId, isNew);
   } catch (err) {

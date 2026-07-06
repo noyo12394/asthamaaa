@@ -10,6 +10,7 @@
  */
 import { TOOLS, toolByName, type ToolContext } from "./tools";
 import { recordAgentSession } from "../store";
+import { formatDistance, normalizeDistanceUnit } from "../distance";
 
 export interface AgentMessage {
   role: "user" | "assistant";
@@ -61,7 +62,7 @@ async function runLlm(
   const apiKey = process.env.OPENAI_API_KEY!;
   const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
   const contextNote = ctx.location
-    ? `Current map context location: ${ctx.location.label ?? ""} (lat ${ctx.location.lat}, lng ${ctx.location.lng}).`
+    ? `Current map context location: ${ctx.location.label ?? ""} (lat ${ctx.location.lat}, lng ${ctx.location.lng}). Display distances in ${normalizeDistanceUnit(ctx.distanceUnit)} unless a source explicitly uses a different unit.`
     : "No map context location selected.";
 
   const convo: OpenAiMessage[] = [
@@ -140,6 +141,13 @@ function fmt(v: unknown): string {
   return v == null ? "n/a" : String(v);
 }
 
+function localizeDistanceText(text: string, unit: ReturnType<typeof normalizeDistanceUnit>): string {
+  return text.replace(/(~?)(\d+(?:\.\d+)?)\s*km\b/g, (_match, approx: string, value: string) => {
+    const digits = value.includes(".") ? 1 : 0;
+    return `${approx}${formatDistance(Number(value), unit, digits)}`;
+  });
+}
+
 async function runOffline(
   messages: AgentMessage[],
   ctx: ToolContext
@@ -148,6 +156,7 @@ async function runOffline(
   const lower = text.toLowerCase();
   const log: AgentToolCall[] = [];
   const loc = ctx.location;
+  const distanceUnit = normalizeDistanceUnit(ctx.distanceUnit);
 
   const needLocation = () =>
     "I need a location for that — search or click a place on the map first, or name a city (e.g. \"Allentown, PA\").";
@@ -261,7 +270,7 @@ async function runOffline(
     };
     const lines = res.candidates
       .slice(0, 5)
-      .map((c, i) => `${i + 1}. ${c.county} — priority ${c.priority}/100. ${c.why}`);
+      .map((c, i) => `${i + 1}. ${c.county} — priority ${c.priority}/100. ${localizeDistanceText(c.why, distanceUnit)}`);
     return {
       reply: `Where temporary low-cost sensors would help most near ${place.label} (coverage gap × vulnerability):\n\n${lines.join("\n")}\n\nMethodology and status labels are in the Monitor Gaps view.`,
       toolCalls: log,
@@ -288,7 +297,7 @@ async function runOffline(
       reply:
         `Uncertainty read-out for ${place.label}:\n\n` +
         `• Air quality: status "${res.airQualityStatus}". ${res.airQualityNote}\n` +
-        `• Monitor coverage: confidence ${res.monitorCoverage.confidence}/100 — nearest site ${fmt(res.monitorCoverage.nearestKm)} km (metadata: ${res.monitorCoverage.metadataStatus}). ${res.monitorCoverage.note}\n` +
+        `• Monitor coverage: confidence ${res.monitorCoverage.confidence}/100 — nearest site ${formatDistance(res.monitorCoverage.nearestKm, distanceUnit)} (metadata: ${res.monitorCoverage.metadataStatus}). ${localizeDistanceText(res.monitorCoverage.note, distanceUnit)}\n` +
         `• County health data: ${res.countyDataVintage.health.status}, vintage ${fmt(res.countyDataVintage.health.vintage)}.\n` +
         `• Vulnerability data: ${res.countyDataVintage.vulnerability.status}, vintage ${fmt(res.countyDataVintage.vulnerability.vintage)}.\n\n` +
         `Anything marked "fallback" is a labeled synthetic placeholder, not a measurement.`,
@@ -318,8 +327,8 @@ async function runOffline(
     reply:
       `${place.label} right now:\n\n` +
       `• Snapshot US AQI ${fmt(aq.usAqi)} (${fmt(aq.category)}) — ${aq.source}, status "${aq.dataStatus}", observed ${aq.observedAt}.\n` +
-      `• Alert priority ${risk.finalScore}/100 (${risk.level}). ${risk.explanation}\n\n` +
-      `Caveats: ${risk.caveats.join(" ")}`,
+      `• Alert priority ${risk.finalScore}/100 (${risk.level}). ${localizeDistanceText(risk.explanation, distanceUnit)}\n\n` +
+      `Caveats: ${localizeDistanceText(risk.caveats.join(" "), distanceUnit)}`,
     toolCalls: log,
   };
 }
