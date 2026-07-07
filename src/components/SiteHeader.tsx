@@ -7,6 +7,7 @@ import { api } from "@/lib/client/api";
 
 const NAV = [
   { href: "/", label: "Command Map" },
+  { href: "/report", label: "My Report" },
   { href: "/simulator", label: "Sensor Planner" },
   { href: "/compare", label: "Compare" },
   { href: "/outlook", label: "7-Day Outlook" },
