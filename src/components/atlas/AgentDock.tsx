@@ -23,6 +23,13 @@ interface ChatItem {
   modeNote?: string | null;
 }
 
+const MODE_LABELS: Record<string, { label: string; live: boolean }> = {
+  gemini: { label: "Gemini", live: true },
+  groq: { label: "Groq", live: true },
+  openai: { label: "OpenAI", live: true },
+  offline: { label: "Deterministic", live: false },
+};
+
 const SUGGESTIONS = [
   "Why is this place high priority?",
   "Compare Allentown, PA and Camden, NJ for asthma-sensitive residents",
@@ -46,6 +53,7 @@ export default function AgentDock({
   const [items, setItems] = useState<ChatItem[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   async function send(text: string) {
@@ -68,6 +76,7 @@ export default function AgentDock({
           distanceUnit: unit,
         }),
       });
+      setMode(d.mode);
       setItems((cur) => [
         ...cur,
         { role: "assistant", content: d.reply, toolCalls: d.toolCalls, modeNote: d.modeNote },
@@ -83,30 +92,48 @@ export default function AgentDock({
     }
   }
 
+  const modeInfo = mode ? MODE_LABELS[mode] : null;
+
   if (!open) {
     return (
       <button
         onClick={onToggle}
-        className="panel flex items-center gap-2 rounded-sm px-3 py-2 text-sm font-medium shadow-sm hover:border-accent"
+        className="btn-accent flex items-center gap-2 px-3.5 py-2 text-sm font-semibold"
       >
-        <span className="h-2 w-2 rounded-full bg-accent" />
+        <span className="live-dot h-2 w-2 rounded-full bg-white shadow-[0_0_6px_1px_rgba(255,255,255,0.8)]" />
         Exposure Navigator
       </button>
     );
   }
 
   return (
-    <div className="panel flex h-[420px] w-[360px] flex-col rounded-sm shadow-lg">
-      <div className="flex items-center justify-between border-b border-hairline px-3 py-2">
-        <div>
-          <h3 className="text-sm font-semibold">Exposure Navigator</h3>
-          <p className="text-[10px] text-ink-3">
-            Tool-driven analysis · distances in {unit}
-          </p>
+    <div className="panel animate-fade-up flex h-[440px] w-[370px] flex-col overflow-hidden">
+      <div className="accent-gradient flex items-center justify-between px-3 py-2.5 text-white">
+        <div className="flex items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white/15 ring-1 ring-white/25">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12h3l2.5-6 5 15 2.5-9H21" />
+            </svg>
+          </span>
+          <div>
+            <h3 className="text-sm font-semibold leading-none">Exposure Navigator</h3>
+            <p className="mt-0.5 text-[10px] text-white/70">Tool-grounded · distances in {unit}</p>
+          </div>
         </div>
-        <button onClick={onToggle} className="text-ink-3 hover:text-ink" aria-label="Close assistant">
-          ✕
-        </button>
+        <div className="flex items-center gap-2">
+          {modeInfo && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-white/15 px-1.5 py-0.5 text-[9px] font-semibold ring-1 ring-white/20"
+              title={modeInfo.live ? "Answered by a live LLM provider" : "Answered by the deterministic tool router"}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${modeInfo.live ? "bg-emerald-300" : "bg-amber-300"}`} />
+              {modeInfo.label}
+            </span>
+          )}
+          <button onClick={onToggle} className="text-white/70 hover:text-white" aria-label="Close assistant">
+            ✕
+          </button>
+        </div>
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-2">
@@ -121,7 +148,7 @@ export default function AgentDock({
                 <li key={s}>
                   <button
                     onClick={() => send(s)}
-                    className="w-full border border-hairline px-2 py-1.5 text-left text-xs text-ink-2 hover:border-accent hover:text-accent"
+                    className="w-full rounded-lg border border-hairline bg-surface px-2.5 py-1.5 text-left text-xs text-ink-2 transition hover:border-accent hover:bg-accent-soft hover:text-accent"
                   >
                     {s}
                   </button>
@@ -179,13 +206,13 @@ export default function AgentDock({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={location ? `Ask about ${location.label ?? "this location"}…` : "Ask the navigator…"}
-          className="min-w-0 flex-1 border border-hairline bg-surface px-2 py-1.5 text-xs outline-none focus:border-accent"
+          className="min-w-0 flex-1 rounded-lg border border-hairline bg-surface px-2.5 py-1.5 text-xs outline-none focus:border-accent"
           aria-label="Message the assistant"
         />
         <button
           type="submit"
           disabled={busy || !input.trim()}
-          className="bg-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+          className="btn-accent px-3.5 py-1.5 text-xs font-semibold disabled:opacity-40"
         >
           Send
         </button>

@@ -427,51 +427,70 @@ async function runOffline(
   };
 }
 
+/**
+ * Build the provider attempt order. The AI_PROVIDER preference (if set and
+ * available) goes first; every other configured provider follows so a
+ * quota/error on one provider cascades to the next instead of dropping
+ * straight to the deterministic router.
+ */
+function providerOrder(): ("gemini" | "groq" | "openai")[] {
+  const preferred = (process.env.AI_PROVIDER || "").toLowerCase();
+  const available: ("gemini" | "groq" | "openai")[] = [];
+  if (process.env.GEMINI_API_KEY) available.push("gemini");
+  if (process.env.GROQ_API_KEY) available.push("groq");
+  if (process.env.OPENAI_API_KEY) available.push("openai");
+  if (preferred === "gemini" || preferred === "groq" || preferred === "openai") {
+    return [
+      ...available.filter((p) => p === preferred),
+      ...available.filter((p) => p !== preferred),
+    ];
+  }
+  return available;
+}
+
+async function runProvider(
+  provider: "gemini" | "groq" | "openai",
+  messages: AgentMessage[],
+  ctx: ToolContext
+): Promise<{ reply: string; toolCalls: AgentToolCall[] }> {
+  if (provider === "openai") return runLlm(messages, ctx);
+  return runGroundedProvider(provider, messages, ctx);
+}
+
 export async function runAgent(
   messages: AgentMessage[],
   ctx: ToolContext
 ): Promise<AgentResult> {
-  const preferred = (process.env.AI_PROVIDER || "").toLowerCase();
-  const hasGemini = Boolean(process.env.GEMINI_API_KEY);
-  const hasGroq = Boolean(process.env.GROQ_API_KEY);
-  const hasOpenAi = Boolean(process.env.OPENAI_API_KEY);
-  let reply: string;
-  let toolCalls: AgentToolCall[];
-  let mode: AgentResult["mode"];
+  const order = providerOrder();
+  let reply = "";
+  let toolCalls: AgentToolCall[] = [];
+  let mode: AgentResult["mode"] = "offline";
   let modeNote: string | null = null;
+  let succeeded = false;
+  const failures: string[] = [];
 
-  if ((preferred === "gemini" || (!preferred && hasGemini)) && hasGemini) {
+  for (const provider of order) {
     try {
-      ({ reply, toolCalls } = await runGroundedProvider("gemini", messages, ctx));
-      mode = "gemini";
+      const out = await runProvider(provider, messages, ctx);
+      reply = out.reply;
+      toolCalls = out.toolCalls;
+      mode = provider;
+      if (failures.length) modeNote = `Fell back after ${failures.join("; ")}.`;
+      succeeded = true;
+      break;
     } catch (err) {
-      ({ reply, toolCalls } = await runOffline(messages, ctx));
-      mode = "offline";
-      modeNote = `Gemini call failed (${err instanceof Error ? err.message.slice(0, 120) : "error"}); answered by the deterministic tool router instead.`;
+      failures.push(
+        `${provider} failed (${err instanceof Error ? err.message.slice(0, 100) : "error"})`
+      );
     }
-  } else if ((preferred === "groq" || (!preferred && hasGroq)) && hasGroq) {
-    try {
-      ({ reply, toolCalls } = await runGroundedProvider("groq", messages, ctx));
-      mode = "groq";
-    } catch (err) {
-      ({ reply, toolCalls } = await runOffline(messages, ctx));
-      mode = "offline";
-      modeNote = `Groq call failed (${err instanceof Error ? err.message.slice(0, 120) : "error"}); answered by the deterministic tool router instead.`;
-    }
-  } else if (hasOpenAi) {
-    try {
-      ({ reply, toolCalls } = await runLlm(messages, ctx));
-      mode = "openai";
-    } catch (err) {
-      ({ reply, toolCalls } = await runOffline(messages, ctx));
-      mode = "offline";
-      modeNote = `LLM call failed (${err instanceof Error ? err.message.slice(0, 120) : "error"}); answered by the deterministic tool router instead.`;
-    }
-  } else {
+  }
+
+  if (!succeeded) {
     ({ reply, toolCalls } = await runOffline(messages, ctx));
     mode = "offline";
-    modeNote =
-      "No LLM provider key is configured — this answer came from the deterministic tool router (real backend tools, scripted language). Add GEMINI_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY for conversational phrasing.";
+    modeNote = order.length
+      ? `All configured LLM providers failed — answered by the deterministic tool router (real backend tools, scripted language). Details: ${failures.join("; ")}.`
+      : "No LLM provider key is configured — this answer came from the deterministic tool router (real backend tools, scripted language). Add GROQ_API_KEY (free tier), GEMINI_API_KEY, or OPENAI_API_KEY for conversational phrasing.";
   }
 
   const sessionId = await recordAgentSession(ctx.userId, {

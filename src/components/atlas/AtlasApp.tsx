@@ -118,21 +118,23 @@ export default function AtlasApp() {
           />
 
           {/* view mode + reset controls */}
-          <div className="absolute top-2 left-2 flex gap-px shadow-sm">
-            {(["2d", "2.5d", "3d"] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setViewMode(m)}
-                className={`px-2.5 py-1.5 text-xs font-medium uppercase ${
-                  viewMode === m ? "bg-accent text-white" : "bg-surface text-ink-2 hover:text-ink"
-                }`}
-              >
-                {m}
-              </button>
-            ))}
+          <div className="absolute top-2 left-2 flex items-center gap-1">
+            <div className="glass flex gap-0.5 rounded-lg p-0.5">
+              {(["2d", "2.5d", "3d"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setViewMode(m)}
+                  className={`rounded-md px-2.5 py-1 text-xs font-semibold uppercase tracking-wide transition ${
+                    viewMode === m ? "accent-gradient text-white shadow-sm" : "text-ink-2 hover:text-ink"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
             <button
               onClick={() => setResetKey((k) => k + 1)}
-              className="bg-surface px-2.5 py-1.5 text-xs text-ink-2 hover:text-ink"
+              className="glass rounded-lg px-2.5 py-1.5 text-xs font-medium text-ink-2 hover:text-accent"
               title="Reset view to the Lehigh Valley"
             >
               Reset
@@ -144,7 +146,7 @@ export default function AtlasApp() {
             {selected && (
               <button
                 onClick={() => setReportOpen(true)}
-                className="panel rounded-sm px-2.5 py-1.5 text-xs text-ink-2 shadow-sm hover:border-accent hover:text-accent"
+                className="glass rounded-lg px-3 py-1.5 text-xs font-medium text-ink-2 hover:text-accent"
               >
                 + Community report here
               </button>
