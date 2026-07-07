@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Activity, Database, RadioTower, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/client/api";
 
 const NAV = [
@@ -33,12 +34,19 @@ export default function SiteHeader() {
   const liveOk = fresh?.liveFetches.some((f) => f.lastOk) ?? false;
 
   return (
-    <header className="no-print flex h-11 shrink-0 items-center gap-4 border-b border-hairline bg-surface px-3">
-      <Link href="/" className="flex items-baseline gap-1.5">
-        <span className="text-sm font-bold tracking-tight">PASS</span>
-        <span className="text-sm text-ink-2">Equity Atlas</span>
+    <header className="no-print flex h-12 shrink-0 items-center gap-4 border-b border-hairline bg-surface/95 px-3 shadow-[0_1px_0_rgba(20,22,26,0.03)] backdrop-blur">
+      <Link href="/" className="group flex items-center gap-2">
+        <span className="grid h-7 w-7 place-items-center rounded-sm bg-ink text-[11px] font-black tracking-tight text-surface shadow-sm">
+          PA
+        </span>
+        <span className="leading-none">
+          <span className="block text-sm font-bold tracking-tight">PASS</span>
+          <span className="block text-[11px] font-medium text-ink-3 group-hover:text-accent">
+            Equity Atlas
+          </span>
+        </span>
       </Link>
-      <nav className="flex gap-0.5 overflow-x-auto text-xs">
+      <nav className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto text-xs">
         {NAV.map((n) => (
           <Link
             key={n.href}
@@ -51,15 +59,24 @@ export default function SiteHeader() {
           </Link>
         ))}
       </nav>
-      <div className="ml-auto flex items-center gap-3 text-[10px] text-ink-3">
+      <div className="ml-auto flex items-center gap-2 text-[10px] text-ink-3">
         {fresh && (
           <>
-            <span className="hidden items-center gap-1 sm:inline-flex" title="Whether any external data fetch has succeeded from this deployment">
-              <span className={`h-1.5 w-1.5 rounded-full ${liveOk ? "bg-good" : "bg-serious"}`} />
+            <span className="hidden items-center gap-1 rounded-full border border-hairline bg-surface-2 px-2 py-1 sm:inline-flex" title="Whether any external data fetch has succeeded from this deployment">
+              <Activity size={12} className={liveOk ? "text-good" : "text-serious"} />
               {liveOk ? "live data" : "fallback mode"}
             </span>
-            <span className="hidden sm:inline" title="Where user records are stored">
+            <span className="hidden items-center gap-1 rounded-full border border-hairline bg-surface-2 px-2 py-1 lg:inline-flex" title="Where user records are stored">
+              <Database size={12} />
               {fresh.environment.databaseConfigured ? "postgres" : "memory (non-durable)"}
+            </span>
+            <span className="hidden items-center gap-1 rounded-full border border-hairline bg-surface-2 px-2 py-1 xl:inline-flex" title="Analysis stack">
+              <RadioTower size={12} />
+              tool-grounded agent
+            </span>
+            <span className="hidden items-center gap-1 rounded-full border border-hairline bg-surface-2 px-2 py-1 xl:inline-flex" title="All health output is prevention guidance, not diagnosis">
+              <ShieldCheck size={12} />
+              clinic-safe
             </span>
           </>
         )}

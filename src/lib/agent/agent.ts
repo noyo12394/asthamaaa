@@ -40,6 +40,10 @@ Rules you must always follow:
 - County health indicators are population context. Never present them as an individual's diagnosis or personal risk. No medical diagnosis, no treatment advice; keep recommendations prevention-focused (e.g., limiting prolonged outdoor exertion, following an existing care plan).
 - Cite the source name and vintage for key figures, briefly, e.g. "(Open-Meteo, modeled, 14:00 UTC)".
 - Be concise and professional; you are speaking to residents, clinicians, and researchers.
+- When users ask for an incident brief or HydroTech-style outputs, translate that into PASS outputs:
+  exposure overlay = current AQI plus place/county context;
+  confidence heatmap = monitor distance, coverage, and sparsity/uncertainty;
+  priority mask = alert priority, equity burden, community reports, and sensor/watch-rule actions.
 - Use geocodePlace before location tools when the user names a place. Use the provided map context location when the user says "here" or "this place".`;
 
 const MAX_TOOL_ROUNDS = 6;

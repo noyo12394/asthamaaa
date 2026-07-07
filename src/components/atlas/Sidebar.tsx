@@ -2,6 +2,7 @@
 
 /** Left rail: search, saved places, layer controls. */
 import { useEffect, useRef, useState } from "react";
+import { Crosshair, Flame, Layers3, MapPin, Radar, Sparkles } from "lucide-react";
 import { api } from "@/lib/client/api";
 import { StatusBadge, Section, Spinner } from "@/components/ui/bits";
 import { formatDistance, type DistanceUnit } from "@/lib/distance";
@@ -19,15 +20,49 @@ interface GeocodeResult {
 interface Props {
   activeLayers: LayerId[];
   onToggleLayer: (id: LayerId) => void;
+  onActivateLayers: (ids: LayerId[]) => void;
   onPickPlace: (lat: number, lng: number, label: string) => void;
   selected: { lat: number; lng: number; label: string | null } | null;
   distanceUnit: DistanceUnit;
   onDistanceUnitChange: (unit: DistanceUnit) => void;
 }
 
+const QUICK_PLACES = [
+  { label: "Allentown command", short: "Allentown", lat: 40.6023, lng: -75.4714 },
+  { label: "Camden equity check", short: "Camden", lat: 39.9259, lng: -75.1196 },
+  { label: "Bronx asthma lens", short: "Bronx", lat: 40.8448, lng: -73.8648 },
+];
+
+const OUTPUT_PRESETS: {
+  label: string;
+  description: string;
+  layers: LayerId[];
+  icon: typeof Layers3;
+}[] = [
+  {
+    label: "Exposure overlay",
+    description: "AQI + vulnerability + equity context",
+    layers: ["aqi", "vulnerability", "equity", "monitors"],
+    icon: Layers3,
+  },
+  {
+    label: "Confidence heatmap",
+    description: "Monitor coverage + uncertainty classes",
+    layers: ["aqi", "coverage", "uncertainty", "monitors"],
+    icon: Radar,
+  },
+  {
+    label: "Priority mask",
+    description: "High-response cells + resident reports",
+    layers: ["aqi", "alert", "equity", "reports", "monitors"],
+    icon: Flame,
+  },
+];
+
 export default function Sidebar({
   activeLayers,
   onToggleLayer,
+  onActivateLayers,
   onPickPlace,
   selected,
   distanceUnit,
@@ -133,6 +168,73 @@ export default function Sidebar({
             ))}
           </ul>
         )}
+      </Section>
+
+      <Section title="Launch pads">
+        <div className="grid grid-cols-3 gap-1.5">
+          {QUICK_PLACES.map((place) => (
+            <button
+              key={place.label}
+              type="button"
+              onClick={() => onPickPlace(place.lat, place.lng, place.label)}
+              className="group border border-hairline bg-surface px-2 py-2 text-left hover:border-accent hover:bg-accent-soft"
+            >
+              <MapPin size={13} className="mb-1 text-accent" />
+              <span className="block truncate text-[11px] font-semibold text-ink">{place.short}</span>
+              <span className="block text-[9px] uppercase tracking-wide text-ink-3">preset</span>
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            onClick={() => onPickPlace(40.6023, -75.4714, "Allentown sensor brief")}
+            className="flex items-center gap-1.5 border border-hairline bg-surface px-2 py-1.5 text-left text-[11px] font-medium text-ink-2 hover:border-accent hover:text-accent"
+          >
+            <Crosshair size={13} /> Sensor brief
+          </button>
+          <button
+            type="button"
+            onClick={() => onPickPlace(39.9526, -75.1652, "Philadelphia clinic brief")}
+            className="flex items-center gap-1.5 border border-hairline bg-surface px-2 py-1.5 text-left text-[11px] font-medium text-ink-2 hover:border-accent hover:text-accent"
+          >
+            <Sparkles size={13} /> Clinic brief
+          </button>
+        </div>
+      </Section>
+
+      <Section title="AI outputs">
+        <div className="space-y-1.5">
+          {OUTPUT_PRESETS.map((preset) => {
+            const Icon = preset.icon;
+            const active = preset.layers.every((layer) => activeLayers.includes(layer));
+            return (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() => onActivateLayers(preset.layers)}
+                className={`group flex w-full items-start gap-2 border px-2 py-2 text-left ${
+                  active
+                    ? "border-accent bg-accent-soft text-accent"
+                    : "border-hairline bg-surface text-ink-2 hover:border-accent hover:bg-accent-soft"
+                }`}
+              >
+                <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-sm bg-surface text-accent shadow-sm">
+                  <Icon size={14} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-xs font-semibold">{preset.label}</span>
+                  <span className="block text-[10px] leading-snug text-ink-3">
+                    {preset.description}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-[10px] leading-snug text-ink-3">
+          Inspired by image-analysis outputs: raw layers become overlays, confidence, and response masks.
+        </p>
       </Section>
 
       <Section

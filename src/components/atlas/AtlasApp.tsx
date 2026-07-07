@@ -5,6 +5,7 @@
  * timeline, agent dock, legend, map-mode controls, community-report form.
  */
 import { useCallback, useState } from "react";
+import { Bot, Crosshair, Flame, Layers3, Radar, ShieldCheck } from "lucide-react";
 import MapCanvas, { type MapViewRequest } from "./MapCanvas";
 import Sidebar from "./Sidebar";
 import Inspector from "./Inspector";
@@ -12,10 +13,32 @@ import Timeline from "./Timeline";
 import AgentDock from "./AgentDock";
 import Legend from "./Legend";
 import { api } from "@/lib/client/api";
-import type { DistanceUnit } from "@/lib/distance";
+import { formatDistance, type DistanceUnit } from "@/lib/distance";
 import type { LayerId, SelectedFeature, SelectedLocation } from "./state";
 
 const DEFAULT_LAYERS: LayerId[] = ["aqi", "monitors", "coverage"];
+const COMMAND_STATS = [
+  { label: "views", value: "9", tone: "text-ink" },
+  { label: "source trail", value: "on", tone: "text-good" },
+];
+
+const INTELLIGENCE_OUTPUTS = [
+  {
+    label: "Exposure overlay",
+    detail: "Real-world context for what residents are breathing now",
+    icon: Layers3,
+  },
+  {
+    label: "Confidence heatmap",
+    detail: "Where monitor coverage is strong, partial, sparse, or remote",
+    icon: Radar,
+  },
+  {
+    label: "Priority mask",
+    detail: "Cells that need attention first for alerts, sensors, or outreach",
+    icon: Flame,
+  },
+];
 
 export default function AtlasApp() {
   const [activeLayers, setActiveLayers] = useState<LayerId[]>(DEFAULT_LAYERS);
@@ -36,6 +59,11 @@ export default function AtlasApp() {
 
   const toggleLayer = (id: LayerId) =>
     setActiveLayers((cur) => (cur.includes(id) ? cur.filter((l) => l !== id) : [...cur, id]));
+
+  const activateLayers = useCallback((ids: LayerId[]) => {
+    setActiveLayers(ids);
+    setMobilePanel("map");
+  }, []);
 
   const pickPlace = useCallback((lat: number, lng: number, label: string) => {
     setSelected({ lat, lng, label, feature: null });
@@ -97,6 +125,7 @@ export default function AtlasApp() {
           <Sidebar
             activeLayers={activeLayers}
             onToggleLayer={toggleLayer}
+            onActivateLayers={activateLayers}
             onPickPlace={pickPlace}
             selected={selected}
             distanceUnit={distanceUnit}
@@ -118,7 +147,7 @@ export default function AtlasApp() {
           />
 
           {/* view mode + reset controls */}
-          <div className="absolute top-2 left-2 flex gap-px shadow-sm">
+          <div className="absolute top-2 left-2 flex gap-px overflow-hidden rounded-sm border border-hairline bg-surface/95 shadow-sm backdrop-blur">
             {(["2d", "2.5d", "3d"] as const).map((m) => (
               <button
                 key={m}
@@ -139,6 +168,70 @@ export default function AtlasApp() {
             </button>
           </div>
 
+          <div className="pointer-events-none absolute top-2 right-2 z-10 hidden w-[320px] rounded-sm border border-hairline bg-surface/90 p-3 shadow-lg backdrop-blur md:block">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="panel-title">Operational intelligence</p>
+                <h2 className="mt-1 text-base font-semibold leading-tight">
+                  {selected?.label ?? "Select a place to activate the atlas"}
+                </h2>
+              </div>
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-accent-soft text-accent">
+                <Radar size={18} />
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-1.5">
+              <div className="border border-hairline bg-surface px-2 py-1.5">
+                <span className="tabular block text-sm font-semibold text-accent">
+                  {formatDistance(10, distanceUnit, 0)} / {formatDistance(25, distanceUnit, 0)}
+                </span>
+                <span className="block truncate text-[9px] uppercase tracking-wide text-ink-3">
+                  monitor bands
+                </span>
+              </div>
+              {COMMAND_STATS.map((stat) => (
+                <div key={stat.label} className="border border-hairline bg-surface px-2 py-1.5">
+                  <span className={`tabular block text-sm font-semibold ${stat.tone}`}>{stat.value}</span>
+                  <span className="block truncate text-[9px] uppercase tracking-wide text-ink-3">
+                    {stat.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-ink-2">
+              <span className="inline-flex items-center gap-1 rounded-full border border-hairline bg-surface px-2 py-0.5">
+                <Layers3 size={11} /> {activeLayers.length} active layers
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-hairline bg-surface px-2 py-0.5">
+                <ShieldCheck size={11} /> no diagnosis
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-hairline bg-surface px-2 py-0.5">
+                <Bot size={11} /> grounded agent
+              </span>
+            </div>
+            <div className="mt-3 border-t border-hairline pt-2">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-3">
+                Instant outputs
+              </p>
+              <div className="space-y-1.5">
+                {INTELLIGENCE_OUTPUTS.map((output) => {
+                  const Icon = output.icon;
+                  return (
+                    <div key={output.label} className="flex gap-2 text-[10px] leading-snug text-ink-3">
+                      <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-sm border border-hairline bg-surface text-accent">
+                        <Icon size={12} />
+                      </span>
+                      <span>
+                        <span className="block font-semibold text-ink-2">{output.label}</span>
+                        {output.detail}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
           {/* report button */}
           <div className="absolute top-2 left-1/2 -translate-x-1/2">
             {selected && (
@@ -157,7 +250,7 @@ export default function AtlasApp() {
           </div>
 
           {/* agent dock */}
-          <div className="absolute right-2 bottom-8 z-10">
+          <div className="fixed right-2 bottom-20 z-30 md:absolute md:bottom-8">
             <AgentDock
               location={selected}
               open={agentOpen}
@@ -165,6 +258,21 @@ export default function AtlasApp() {
               distanceUnit={distanceUnit}
             />
           </div>
+
+          {!selected && (
+            <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[340px] items-center justify-center border-l border-hairline bg-gradient-to-b from-surface/80 to-surface/55 px-8 text-center backdrop-blur-sm lg:flex">
+              <div>
+                <div className="mx-auto grid h-12 w-12 place-items-center rounded-sm border border-hairline bg-surface text-accent shadow-sm">
+                  <Crosshair size={22} />
+                </div>
+                <h2 className="mt-4 text-lg font-semibold">Start with a place</h2>
+                <p className="mt-2 text-sm leading-relaxed text-ink-3">
+                  Search, click the map, or use a launch pad. The atlas will assemble current AQI,
+                  monitor confidence, county burden, equity context, and an audit trail.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* community report modal */}
           {reportOpen && selected && (
