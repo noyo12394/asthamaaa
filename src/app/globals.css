@@ -2,22 +2,26 @@
 @import "maplibre-gl/dist/maplibre-gl.css";
 
 /*
- * PASS Equity Atlas design tokens.
- * Muted, academic/public-health palette: paper surfaces, ink text, one
- * restrained blue accent. EPA AQI category colors are reserved for the
+ * PASS Equity Atlas design system.
+ * A crisp, premium public-health command console: cool neutral surfaces,
+ * a vivid but restrained blue→indigo accent, real elevation, and one
+ * dark navigation shell. EPA AQI category colors stay reserved for the
  * air-quality domain scale only.
  */
 @theme {
-  --color-paper: #f4f4f2;
-  --color-surface: #fcfcfb;
-  --color-surface-2: #f0efec;
-  --color-ink: #14161a;
-  --color-ink-2: #52514e;
-  --color-ink-3: #898781;
-  --color-hairline: #e1e0d9;
-  --color-baseline: #c3c2b7;
-  --color-accent: #1c5cab;
-  --color-accent-soft: #e3edf9;
+  --color-paper: #f5f7fa;
+  --color-surface: #ffffff;
+  --color-surface-2: #eef1f5;
+  --color-ink: #0f172a;
+  --color-ink-2: #475569;
+  --color-ink-3: #8a94a6;
+  --color-hairline: #e4e8ee;
+  --color-baseline: #c3cad4;
+  --color-accent: #2563eb;
+  --color-accent-2: #4f46e5;
+  --color-accent-soft: #e8f0fe;
+  --color-shell: #0b1b33;
+  --color-shell-2: #12305c;
   --color-good: #0ca30c;
   --color-warning: #b97b00;
   --color-serious: #c05621;
@@ -33,11 +37,15 @@ body {
 }
 
 body {
-  background: var(--color-paper);
+  background:
+    radial-gradient(1200px 600px at 100% -10%, #eaf0fb 0%, rgba(234, 240, 251, 0) 55%),
+    radial-gradient(900px 500px at -5% 0%, #eef2f7 0%, rgba(238, 242, 247, 0) 50%),
+    var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /* Dense panel type scale */
@@ -53,10 +61,92 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Hairline-bordered panel */
+/* Elevated, hairline-bordered panel */
 .panel {
   background: var(--color-surface);
   border: 1px solid var(--color-hairline);
+  border-radius: 12px;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 8px 24px -12px rgba(15, 23, 42, 0.16);
+}
+
+/* Elevation helpers */
+.elev-1 {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 4px 12px -6px rgba(15, 23, 42, 0.12);
+}
+.elev-2 {
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06), 0 16px 40px -16px rgba(15, 23, 42, 0.24);
+}
+
+/* Frosted glass for floating map chrome */
+.glass {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: saturate(1.2) blur(10px);
+  -webkit-backdrop-filter: saturate(1.2) blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 12px 32px -14px rgba(15, 23, 42, 0.28);
+}
+
+/* Gradient accent used on the app shell and primary actions */
+.accent-gradient {
+  background-image: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-2) 100%);
+}
+.shell-gradient {
+  background-image:
+    radial-gradient(600px 200px at 12% -40%, rgba(79, 70, 229, 0.5) 0%, rgba(79, 70, 229, 0) 70%),
+    linear-gradient(180deg, var(--color-shell-2) 0%, var(--color-shell) 100%);
+}
+
+/* Primary button */
+.btn-accent {
+  background-image: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-2) 100%);
+  color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.4), 0 8px 18px -8px rgba(37, 99, 235, 0.6);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+}
+.btn-accent:hover {
+  filter: brightness(1.05);
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.45), 0 12px 22px -8px rgba(37, 99, 235, 0.7);
+}
+.btn-accent:active {
+  transform: translateY(1px);
+}
+
+/* Chip / pill */
+.chip {
+  border-radius: 9999px;
+  border: 1px solid var(--color-hairline);
+  background: var(--color-surface);
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.chip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* Focus ring */
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 70%, white);
+  outline-offset: 1px;
+  border-radius: 6px;
+}
+
+/* Motion */
+@keyframes pass-fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes pass-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.82); }
+}
+.animate-fade-up { animation: pass-fade-up 0.28s ease both; }
+.live-dot { animation: pass-pulse 1.8s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up, .live-dot { animation: none !important; }
 }
 
 /* Scrollbars that suit a dense tool */
@@ -73,9 +163,14 @@ body {
   font-family: var(--font-sans);
   font-size: 12px;
   border: 1px solid var(--color-hairline);
-  border-radius: 4px;
-  box-shadow: 0 4px 16px rgba(20, 22, 26, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.18);
   padding: 10px 12px;
+}
+.maplibregl-ctrl-group {
+  border-radius: 10px !important;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.16) !important;
 }
 
 @media print {
@@ -85,4 +180,5 @@ body {
   body {
     background: white;
   }
+  .panel { box-shadow: none; }
 }
