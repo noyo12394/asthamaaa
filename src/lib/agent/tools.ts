@@ -306,7 +306,7 @@ export const TOOLS: ToolDef[] = [
       properties: {
         lat: { type: "number" },
         lng: { type: "number" },
-        radiusKm: { type: "number", description: "search radius, default 120" },
+        radiusKm: { type: "number", description: "search radius, default 40" },
         count: { type: "number", description: "how many candidates, default 5" },
       },
       required: ["lat", "lng"],
@@ -314,7 +314,7 @@ export const TOOLS: ToolDef[] = [
     execute: async (args) => {
       const lat = num(args.lat);
       const lng = num(args.lng);
-      const radiusKm = args.radiusKm ? num(args.radiusKm) : 120;
+      const radiusKm = args.radiusKm ? num(args.radiusKm) : 40;
       const count = args.count ? Math.min(10, num(args.count)) : 5;
       const { haversineKm } = await import("../geo");
       const candidates = allCounties()
@@ -342,6 +342,7 @@ export const TOOLS: ToolDef[] = [
         .slice(0, count);
       return {
         candidates,
+        radiusKm,
         methodology: "priority = 0.55×coverage gap + 0.45×vulnerability, both 0-100. Coverage from monitor metadata; vulnerability from county indicators (check their status labels).",
       };
     },

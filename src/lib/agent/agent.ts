@@ -40,10 +40,12 @@ Rules you must always follow:
 - County health indicators are population context. Never present them as an individual's diagnosis or personal risk. No medical diagnosis, no treatment advice; keep recommendations prevention-focused (e.g., limiting prolonged outdoor exertion, following an existing care plan).
 - Cite the source name and vintage for key figures, briefly, e.g. "(Open-Meteo, modeled, 14:00 UTC)".
 - Be concise and professional; you are speaking to residents, clinicians, and researchers.
+- If the user sends a greeting, typo, or unclear short phrase, ask a brief clarification question instead of generating a full report.
 - When users ask for an incident brief or HydroTech-style outputs, translate that into PASS outputs:
   exposure overlay = current AQI plus place/county context;
   confidence heatmap = monitor distance, coverage, and sparsity/uncertainty;
   priority mask = alert priority, equity burden, community reports, and sensor/watch-rule actions.
+- For sensor plans, keep recommendations local. If no radius is specified, use about 25 miles / 40 km around the selected or named place and say so.
 - Use geocodePlace before location tools when the user names a place. Use the provided map context location when the user says "here" or "this place".`;
 
 const MAX_TOOL_ROUNDS = 6;
@@ -259,6 +261,24 @@ async function runOffline(
   const needLocation = () =>
     "I need a location for that — search or click a place on the map first, or name a city (e.g. \"Allentown, PA\").";
 
+  const clarification =
+    "What would you like to check? I can make a sensor plan, clinic-safe note, source audit, incident brief, or cross-city comparison.";
+  const hasActionIntent =
+    /(compare|sensor|clinic|handout|resident|watch|alert|uncertain|fallback|live|source|confidence|incident|brief|overlay|heatmap|mask|aqi|air|risk|priority|asthma|copd|why|where|what|how)/i.test(
+      text
+    );
+  if (!hasActionIntent && text.trim().split(/\s+/).length <= 3) {
+    return { reply: clarification, toolCalls: log };
+  }
+
+  function requestedRadiusKm(): number {
+    const explicit = text.match(/(\d+(?:\.\d+)?)\s*(mi|mile|miles|km|kilometer|kilometers)\b/i);
+    if (!explicit) return 40;
+    const value = Number(explicit[1]);
+    if (!Number.isFinite(value)) return 40;
+    return explicit[2].toLowerCase().startsWith("mi") ? value * 1.609344 : value;
+  }
+
   // Try to pull a named place out of the message ("in <place>", "at <place>")
   async function resolvePlace(): Promise<{ lat: number; lng: number; label: string } | null> {
     const m = text.match(/(?:in|at|near|for)\s+([A-Z][A-Za-z.\s]+(?:,\s*[A-Z]{2})?)/);
@@ -363,14 +383,25 @@ async function runOffline(
   if (lower.includes("sensor")) {
     const place = await resolvePlace();
     if (!place) return { reply: needLocation(), toolCalls: log };
-    const res = (await call("recommendSensorPlacement", { lat: place.lat, lng: place.lng }, ctx, log)) as {
-      candidates: { county: string; priority: number; why: string }[];
+    const radiusKm = requestedRadiusKm();
+    const res = (await call("recommendSensorPlacement", { lat: place.lat, lng: place.lng, radiusKm }, ctx, log)) as {
+      candidates: { county: string; priority: number; distanceKm: number; why: string }[];
+      radiusKm: number;
     };
+    if (!res.candidates.length) {
+      return {
+        reply: `I did not find a county-level sensor candidate inside ${formatDistance(radiusKm, distanceUnit)} of ${place.label}. Try a wider radius, like "sensor plan within 75 miles."`,
+        toolCalls: log,
+      };
+    }
     const lines = res.candidates
       .slice(0, 5)
-      .map((c, i) => `${i + 1}. ${c.county} — priority ${c.priority}/100. ${localizeDistanceText(c.why, distanceUnit)}`);
+      .map(
+        (c, i) =>
+          `${i + 1}. ${c.county} — ${formatDistance(c.distanceKm, distanceUnit)} away, priority ${c.priority}/100. ${localizeDistanceText(c.why, distanceUnit)}`
+      );
     return {
-      reply: `Where temporary low-cost sensors would help most near ${place.label} (coverage gap × vulnerability):\n\n${lines.join("\n")}\n\nMethodology and status labels are in the Monitor Gaps view.`,
+      reply: `Local temporary-sensor plan for ${place.label} within ${formatDistance(res.radiusKm, distanceUnit)} (coverage gap × vulnerability):\n\n${lines.join("\n")}\n\nMethodology and status labels are in the Monitor Gaps view.`,
       toolCalls: log,
     };
   }
@@ -474,9 +505,7 @@ export async function runAgent(
     }
   }
 
-  let modeNote: string | null = failures.length
-    ? `${failures.join("; ")}. Tried the next configured provider before falling back.`
-    : null;
+  let modeNote: string | null = null;
 
   if (!reply || !toolCalls || !mode) {
     ({ reply, toolCalls } = await runOffline(messages, ctx));
