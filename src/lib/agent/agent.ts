@@ -1,12 +1,12 @@
 /**
  * Exposure Navigator agent loop.
  *
- * Two modes:
- *  - "llm": OpenAI chat completions with function calling (OPENAI_API_KEY set).
- *    Implemented with plain fetch (no SDK) for full control over the loop.
- *  - "offline": deterministic intent router that drives the same tools and
- *    composes an honest answer. Clearly labeled in the response so nobody
- *    mistakes the fallback for a language model.
+ * Modes:
+ *  - "openai": OpenAI chat completions with function calling.
+ *  - "gemini" / "groq": deterministic tool router first, then provider LLM
+ *    composes the answer from tool results. This keeps data grounded while
+ *    supporting lower-cost providers that may not share the exact tool API.
+ *  - "offline": deterministic intent router only.
  */
 import { TOOLS, toolByName, type ToolContext } from "./tools";
 import { recordAgentSession } from "../store";
@@ -26,7 +26,7 @@ export interface AgentToolCall {
 export interface AgentResult {
   reply: string;
   toolCalls: AgentToolCall[];
-  mode: "llm" | "offline";
+  mode: "openai" | "gemini" | "groq" | "offline";
   modeNote: string | null;
   sessionId: string;
 }
@@ -120,6 +120,100 @@ async function runLlm(
     reply: "I hit the tool-call limit for one turn. Here is what I gathered so far — ask a follow-up to continue.",
     toolCalls,
   };
+}
+
+function providerSystemPrompt(ctx: ToolContext) {
+  const unit = normalizeDistanceUnit(ctx.distanceUnit);
+  return `${SYSTEM_PROMPT}
+
+You are receiving already-executed backend tool results from PASS Equity Atlas.
+Use only those results and the deterministic draft. Do not invent missing data.
+Keep the answer concise, direct, and useful. Use ${unit} for distances.`;
+}
+
+function providerPayload(messages: AgentMessage[], draft: string, toolCalls: AgentToolCall[]) {
+  return [
+    `Conversation:\n${messages.map((m) => `${m.role}: ${m.content}`).join("\n")}`,
+    `Deterministic backend draft:\n${draft}`,
+    `Tool results JSON:\n${JSON.stringify(toolCalls).slice(0, 14000)}`,
+    "Now write the final Exposure Navigator answer. Preserve caveats about fallback data, modeled/live status, and health data not being a diagnosis.",
+  ].join("\n\n");
+}
+
+async function composeWithGemini(
+  messages: AgentMessage[],
+  ctx: ToolContext,
+  draft: string,
+  toolCalls: AgentToolCall[]
+) {
+  const apiKey = process.env.GEMINI_API_KEY!;
+  const model = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: providerSystemPrompt(ctx) }] },
+        contents: [{ role: "user", parts: [{ text: providerPayload(messages, draft, toolCalls) }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 900 },
+      }),
+    }
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Gemini API error ${res.status}: ${text.slice(0, 300)}`);
+  }
+  const data = (await res.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  const reply = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("").trim();
+  if (!reply) throw new Error("Gemini returned no text");
+  return reply;
+}
+
+async function composeWithGroq(
+  messages: AgentMessage[],
+  ctx: ToolContext,
+  draft: string,
+  toolCalls: AgentToolCall[]
+) {
+  const apiKey = process.env.GROQ_API_KEY!;
+  const model = process.env.GROQ_MODEL ?? "llama-3.1-8b-instant";
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: providerSystemPrompt(ctx) },
+        { role: "user", content: providerPayload(messages, draft, toolCalls) },
+      ],
+      temperature: 0.2,
+      max_tokens: 900,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Groq API error ${res.status}: ${text.slice(0, 300)}`);
+  }
+  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  const reply = data.choices?.[0]?.message?.content?.trim();
+  if (!reply) throw new Error("Groq returned no text");
+  return reply;
+}
+
+async function runGroundedProvider(
+  provider: "gemini" | "groq",
+  messages: AgentMessage[],
+  ctx: ToolContext
+): Promise<{ reply: string; toolCalls: AgentToolCall[] }> {
+  const grounded = await runOffline(messages, ctx);
+  const reply =
+    provider === "gemini"
+      ? await composeWithGemini(messages, ctx, grounded.reply, grounded.toolCalls)
+      : await composeWithGroq(messages, ctx, grounded.reply, grounded.toolCalls);
+  return { reply, toolCalls: grounded.toolCalls };
 }
 
 // ---------------------------------------------------------------------------
@@ -337,16 +431,37 @@ export async function runAgent(
   messages: AgentMessage[],
   ctx: ToolContext
 ): Promise<AgentResult> {
-  const hasKey = Boolean(process.env.OPENAI_API_KEY);
+  const preferred = (process.env.AI_PROVIDER || "").toLowerCase();
+  const hasGemini = Boolean(process.env.GEMINI_API_KEY);
+  const hasGroq = Boolean(process.env.GROQ_API_KEY);
+  const hasOpenAi = Boolean(process.env.OPENAI_API_KEY);
   let reply: string;
   let toolCalls: AgentToolCall[];
-  let mode: "llm" | "offline";
+  let mode: AgentResult["mode"];
   let modeNote: string | null = null;
 
-  if (hasKey) {
+  if ((preferred === "gemini" || (!preferred && hasGemini)) && hasGemini) {
+    try {
+      ({ reply, toolCalls } = await runGroundedProvider("gemini", messages, ctx));
+      mode = "gemini";
+    } catch (err) {
+      ({ reply, toolCalls } = await runOffline(messages, ctx));
+      mode = "offline";
+      modeNote = `Gemini call failed (${err instanceof Error ? err.message.slice(0, 120) : "error"}); answered by the deterministic tool router instead.`;
+    }
+  } else if ((preferred === "groq" || (!preferred && hasGroq)) && hasGroq) {
+    try {
+      ({ reply, toolCalls } = await runGroundedProvider("groq", messages, ctx));
+      mode = "groq";
+    } catch (err) {
+      ({ reply, toolCalls } = await runOffline(messages, ctx));
+      mode = "offline";
+      modeNote = `Groq call failed (${err instanceof Error ? err.message.slice(0, 120) : "error"}); answered by the deterministic tool router instead.`;
+    }
+  } else if (hasOpenAi) {
     try {
       ({ reply, toolCalls } = await runLlm(messages, ctx));
-      mode = "llm";
+      mode = "openai";
     } catch (err) {
       ({ reply, toolCalls } = await runOffline(messages, ctx));
       mode = "offline";
@@ -356,7 +471,7 @@ export async function runAgent(
     ({ reply, toolCalls } = await runOffline(messages, ctx));
     mode = "offline";
     modeNote =
-      "OPENAI_API_KEY is not configured — this answer came from the deterministic tool router (real backend tools, scripted language). Configure the key for full conversational analysis.";
+      "No LLM provider key is configured — this answer came from the deterministic tool router (real backend tools, scripted language). Add GEMINI_API_KEY, GROQ_API_KEY, or OPENAI_API_KEY for conversational phrasing.";
   }
 
   const sessionId = await recordAgentSession(ctx.userId, {
