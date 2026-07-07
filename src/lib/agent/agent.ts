@@ -138,9 +138,9 @@ Keep the answer concise, direct, and useful. Use ${unit} for distances.`;
 function providerPayload(messages: AgentMessage[], draft: string, toolCalls: AgentToolCall[]) {
   return [
     `Conversation:\n${messages.map((m) => `${m.role}: ${m.content}`).join("\n")}`,
-    `Deterministic backend draft:\n${draft}`,
+    `Grounded backend draft for factual content only, not the provider identity:\n${draft}`,
     `Tool results JSON:\n${JSON.stringify(toolCalls).slice(0, 14000)}`,
-    "Now write the final Exposure Navigator answer. Preserve caveats about fallback data, modeled/live status, and health data not being a diagnosis.",
+    "Now write the final Exposure Navigator answer. Preserve caveats about fallback data, modeled/live status, and health data not being a diagnosis. Do not describe the grounded draft as the provider or mode.",
   ].join("\n\n");
 }
 
