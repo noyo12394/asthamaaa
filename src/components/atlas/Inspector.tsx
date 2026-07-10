@@ -6,6 +6,7 @@
  * source trail. Tabs keep it dense but navigable.
  */
 import { useEffect, useState } from "react";
+import { Droplets, ExternalLink } from "lucide-react";
 import { api } from "@/lib/client/api";
 import { aqiChip } from "@/lib/client/colors";
 import { formatDistance, type DistanceUnit } from "@/lib/distance";
@@ -18,7 +19,7 @@ import {
   Spinner,
   StatusBadge,
 } from "@/components/ui/bits";
-import type { AirQualitySnapshot, RiskScoreResult, SourceRef } from "@/lib/types";
+import type { AirQualitySnapshot, RiskScoreResult, SourceRef, WaterQualitySnapshot } from "@/lib/types";
 import type { SelectedLocation } from "./state";
 
 interface ResolveData {
@@ -83,6 +84,38 @@ const HEALTH_LABELS: Record<string, string> = {
   cancer: "Cancer (non-skin)",
 };
 
+function fallbackWater(lat: number, lng: number): WaterQualitySnapshot & { servedFromCache: boolean } {
+  const fetchedAt = new Date().toISOString();
+  const source: SourceRef = {
+    name: "Water route unavailable",
+    url: null,
+    vintage: "client fallback",
+    fetchedAt,
+    status: "fallback",
+    confidence: "low",
+    notes: "The water API route did not return a response. This keeps the Inspector stable and is not a measurement.",
+  };
+  return {
+    location: { lat, lng },
+    status: "fallback",
+    fetchedAt,
+    servedFromCache: false,
+    drinkingWater: {
+      systems: [{ name: { value: "Water lookup unavailable", source }, pwsid: { value: null, source }, status: { value: "fallback", source } }],
+      violations: [{ contaminant: "Drinking-water violations", count: { value: 0, unit: "records", source }, period: "fallback" }],
+      contaminants: [
+        { contaminant: "Lead", value: { value: "not loaded", source }, concern: "unknown" },
+        { contaminant: "PFAS", value: { value: "not loaded", source }, concern: "unknown" },
+      ],
+    },
+    surfaceWater: { nearbyStations: [], recentSamples: [], assessment: { summary: { value: "not loaded", source } } },
+    pfas: { detections: [], ucmr5Summary: { value: "not loaded", source } },
+    externalLinks: [],
+    sources: [source],
+    caveats: ["Water route unavailable; no water measurement is displayed."],
+  };
+}
+
 export default function Inspector({
   selected,
   profile,
@@ -98,6 +131,7 @@ export default function Inspector({
   const [main, setMain] = useState<{
     key: string;
     aq: AirQualitySnapshot & { servedFromCache: boolean };
+    water: WaterQualitySnapshot & { servedFromCache: boolean };
     resolve: ResolveData;
     risk: RiskScoreResult;
   } | null>(null);
@@ -109,6 +143,7 @@ export default function Inspector({
     : null;
   const loading = Boolean(key) && main?.key !== key;
   const aq = main?.key === key ? main.aq : null;
+  const water = main?.key === key ? main.water : null;
   const resolve = main?.key === key ? main.resolve : null;
   const risk = main?.key === key ? main.risk : null;
   const county = countyState?.key === key ? countyState.data : null;
@@ -132,6 +167,9 @@ export default function Inspector({
           ),
           api<TrailData>(`/api/source-trail?lat=${lat}&lng=${lng}`).catch(() => null),
         ]);
+        const waterD = await api<WaterQualitySnapshot & { servedFromCache: boolean }>(
+          `/api/water/current?lat=${lat}&lng=${lng}${resD.county ? `&county=${encodeURIComponent(resD.county.name)}&state=${encodeURIComponent(resD.county.state)}` : ""}`
+        ).catch(() => null);
         const countyD = resD.county
           ? await api<CountyProfile>(`/api/county-profile?fips=${resD.county.fips}`).catch(
               () => null
@@ -140,7 +178,7 @@ export default function Inspector({
         if (stale) return;
         // commit everything at once so a re-run of this effect (triggered by
         // setMain) can't cancel the follow-up fetches
-        setMain({ key, aq: aqD, resolve: resD, risk: riskD });
+        setMain({ key, aq: aqD, water: waterD ?? fallbackWater(lat, lng), resolve: resD, risk: riskD });
         if (trailD) setTrailState({ key, data: trailD });
         if (countyD) setCountyState({ key, data: countyD });
       } catch {
@@ -256,6 +294,82 @@ export default function Inspector({
                 <div className="mt-2">
                   <SourceLine source={aq.usAqi.source} />
                 </div>
+              </Section>
+            )}
+
+            {water && (
+              <Section title="Water & drinking water">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <Droplets size={16} className="text-accent" />
+                      {water.drinkingWater.systems[0]?.name.value ?? "Water system lookup"}
+                    </div>
+                    <p className="mt-1 text-[11px] leading-snug text-ink-3">
+                      Drinking-water, PFAS/lead, and nearby surface-water context. Not a
+                      household tap-water test or compliance determination.
+                    </p>
+                  </div>
+                  <StatusBadge status={water.status} />
+                </div>
+
+                <dl className="tabular mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div className="border border-hairline px-2 py-1.5">
+                    <dt className="text-[10px] text-ink-3">Violations</dt>
+                    <dd className="font-medium">
+                      {water.drinkingWater.violations[0]?.count.value ?? "—"}
+                      <span className="ml-1 text-[10px] font-normal text-ink-3">records</span>
+                    </dd>
+                  </div>
+                  <div className="border border-hairline px-2 py-1.5">
+                    <dt className="text-[10px] text-ink-3">WQP stations</dt>
+                    <dd className="font-medium">
+                      {water.surfaceWater.nearbyStations.length}
+                      <span className="ml-1 text-[10px] font-normal text-ink-3">nearby</span>
+                    </dd>
+                  </div>
+                </dl>
+
+                <div className="mt-3 space-y-2">
+                  {water.drinkingWater.contaminants.slice(0, 4).map((item) => (
+                    <div key={`${item.contaminant}-${item.value.source.name}`} className="border border-hairline bg-surface/80 px-2 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold">{item.contaminant}</span>
+                        <StatusBadge status={item.value.source.status} />
+                      </div>
+                      <p className="mt-1 text-[11px] text-ink-2">
+                        {String(item.value.value)}
+                        {item.value.unit ? ` ${item.value.unit}` : ""}
+                      </p>
+                      <div className="mt-1">
+                        <SourceLine source={item.value.source} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="mt-3 border border-hairline bg-accent-soft/50 px-2 py-2 text-[11px] leading-snug text-ink-2">
+                  Lead can appear across air, dust, soil, and water pathways. This panel is
+                  a screening tool, not a diagnosis or regulatory compliance determination.
+                </p>
+
+                {water.externalLinks.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {water.externalLinks.slice(0, 3).map((link) => (
+                      <a
+                        key={link.label}
+                        href={link.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 border border-hairline px-2 py-1 text-[11px] font-medium text-ink-2 hover:border-accent hover:text-accent"
+                        title={link.explanation}
+                      >
+                        <ExternalLink size={12} />
+                        {link.label}
+                      </a>
+                    ))}
+                  </div>
+                )}
               </Section>
             )}
 
@@ -579,6 +693,28 @@ export default function Inspector({
                   </table>
                   <p className="mt-2 text-[11px] leading-snug text-ink-3">{trail.note}</p>
                 </Section>
+                {water && (
+                  <Section title="Water source trail">
+                    <ul className="space-y-3">
+                      {water.sources.slice(0, 6).map((source, i) => (
+                        <li key={`${source.name}-${i}`}>
+                          <p className="text-xs font-medium">{source.name}</p>
+                          <div className="mt-1">
+                            <SourceLine source={source} />
+                          </div>
+                          {source.notes && (
+                            <p className="mt-0.5 text-[11px] leading-snug text-ink-3">{source.notes}</p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                    <ul className="mt-3 list-disc space-y-1 pl-4 text-[11px] leading-snug text-ink-3">
+                      {water.caveats.map((caveat) => (
+                        <li key={caveat}>{caveat}</li>
+                      ))}
+                    </ul>
+                  </Section>
+                )}
               </>
             )}
           </>

@@ -62,5 +62,6 @@ export const TTL = {
   geocode: 24 * 60 * 60 * 1000, // 24h — places don't move
   airQualityCurrent: 10 * 60 * 1000, // 10 min
   airQualityHistory: 30 * 60 * 1000, // 30 min
+  waterQualityCurrent: 60 * 60 * 1000, // 1h — official water sources change slowly
   mapCells: 10 * 60 * 1000, // 10 min
 } as const;
