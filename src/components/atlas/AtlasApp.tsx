@@ -5,7 +5,7 @@
  * timeline, agent dock, legend, map-mode controls, community-report form.
  */
 import { useCallback, useState } from "react";
-import { Bot, Crosshair, Flame, Layers3, Radar, ShieldCheck } from "lucide-react";
+import { Bot, Crosshair, Droplets, Flame, Layers3, Radar, ShieldCheck } from "lucide-react";
 import MapCanvas, { type MapViewRequest } from "./MapCanvas";
 import Sidebar from "./Sidebar";
 import Inspector from "./Inspector";
@@ -19,6 +19,7 @@ import type { LayerId, SelectedFeature, SelectedLocation } from "./state";
 const DEFAULT_LAYERS: LayerId[] = ["aqi", "monitors", "coverage"];
 const COMMAND_STATS = [
   { label: "views", value: "9", tone: "text-ink" },
+  { label: "water", value: "on", tone: "text-accent" },
   { label: "source trail", value: "on", tone: "text-good" },
 ];
 
@@ -37,6 +38,11 @@ const INTELLIGENCE_OUTPUTS = [
     label: "Priority mask",
     detail: "Cells that need attention first for alerts, sensors, or outreach",
     icon: Flame,
+  },
+  {
+    label: "Water/PFAS check",
+    detail: "Drinking-water context, WQP stations, lead and PFAS caveats",
+    icon: Droplets,
   },
 ];
 
@@ -168,7 +174,7 @@ export default function AtlasApp() {
             </button>
           </div>
 
-          <div className="pointer-events-none absolute top-2 right-2 z-10 hidden w-[320px] rounded-sm border border-hairline bg-surface/90 p-3 shadow-lg backdrop-blur md:block">
+          <div className="pointer-events-none absolute top-2 right-2 z-10 hidden w-[360px] rounded-sm border border-hairline bg-surface/90 p-3 shadow-lg backdrop-blur md:block">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="panel-title">Operational intelligence</p>
@@ -180,7 +186,7 @@ export default function AtlasApp() {
                 <Radar size={18} />
               </span>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-1.5">
+            <div className="mt-3 grid grid-cols-4 gap-1.5">
               <div className="border border-hairline bg-surface px-2 py-1.5">
                 <span className="tabular block text-sm font-semibold text-accent">
                   {formatDistance(10, distanceUnit, 0)} / {formatDistance(25, distanceUnit, 0)}
@@ -268,7 +274,8 @@ export default function AtlasApp() {
                 <h2 className="mt-4 text-lg font-semibold">Start with a place</h2>
                 <p className="mt-2 text-sm leading-relaxed text-ink-3">
                   Search, click the map, or use a launch pad. The atlas will assemble current AQI,
-                  monitor confidence, county burden, equity context, and an audit trail.
+                  water and PFAS context, monitor confidence, county burden, equity context, and
+                  an audit trail.
                 </p>
               </div>
             </div>

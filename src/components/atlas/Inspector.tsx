@@ -72,7 +72,7 @@ interface TrailData {
   note: string;
 }
 
-type Tab = "overview" | "county" | "sources";
+type Tab = "overview" | "water" | "county" | "sources";
 
 const HEALTH_LABELS: Record<string, string> = {
   asthma: "Adult asthma",
@@ -232,7 +232,7 @@ export default function Inspector({
       </div>
 
       <div className="flex border-b border-hairline text-xs" role="tablist">
-        {(["overview", "county", "sources"] as Tab[]).map((tabId) => (
+        {(["overview", "water", "county", "sources"] as Tab[]).map((tabId) => (
           <button
             key={tabId}
             role="tab"
@@ -574,6 +574,131 @@ export default function Inspector({
                     </li>
                   ))}
                 </ul>
+              </Section>
+            )}
+          </>
+        )}
+
+        {tab === "water" && !loading && (
+          <>
+            {water ? (
+              <>
+                <Section title="Water & drinking water" action={<StatusBadge status={water.status} />}>
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-sm border border-hairline bg-accent-soft text-accent">
+                      <Droplets size={20} />
+                    </span>
+                    <div>
+                      <h3 className="text-sm font-semibold">
+                        {water.drinkingWater.systems[0]?.name.value ?? "Water system lookup"}
+                      </h3>
+                      <p className="mt-1 text-xs leading-relaxed text-ink-3">
+                        Drinking-water systems, lead/PFAS context, nearby Water Quality Portal
+                        stations, external tools, and caveats for the selected place.
+                      </p>
+                    </div>
+                  </div>
+                  <dl className="tabular mt-4 grid grid-cols-2 gap-2 text-xs">
+                    <div className="border border-hairline bg-surface px-2 py-2">
+                      <dt className="text-[10px] uppercase tracking-wide text-ink-3">
+                        Drinking-water violations
+                      </dt>
+                      <dd className="mt-1 text-lg font-semibold">
+                        {water.drinkingWater.violations[0]?.count.value ?? "—"}
+                      </dd>
+                      <dd className="text-[10px] text-ink-3">
+                        {water.drinkingWater.violations[0]?.period ?? "latest lookup"}
+                      </dd>
+                    </div>
+                    <div className="border border-hairline bg-surface px-2 py-2">
+                      <dt className="text-[10px] uppercase tracking-wide text-ink-3">
+                        Nearby WQP stations
+                      </dt>
+                      <dd className="mt-1 text-lg font-semibold">
+                        {water.surfaceWater.nearbyStations.length}
+                      </dd>
+                      <dd className="text-[10px] text-ink-3">within lookup radius</dd>
+                    </div>
+                  </dl>
+                </Section>
+
+                <Section title="Lead and PFAS context">
+                  <div className="space-y-2">
+                    {water.drinkingWater.contaminants.slice(0, 6).map((item) => (
+                      <div
+                        key={`${item.contaminant}-${item.value.source.name}`}
+                        className="border border-hairline bg-surface px-2.5 py-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-semibold">{item.contaminant}</span>
+                          <StatusBadge status={item.value.source.status} />
+                        </div>
+                        <p className="tabular mt-1 text-xs text-ink-2">
+                          {String(item.value.value)}
+                          {item.value.unit ? ` ${item.value.unit}` : ""}
+                        </p>
+                        <div className="mt-1.5">
+                          <SourceLine source={item.value.source} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+
+                <Section title="Nearby water monitoring">
+                  {water.surfaceWater.nearbyStations.length === 0 ? (
+                    <p className="text-xs leading-relaxed text-ink-3">
+                      No nearby Water Quality Portal stations were returned for this request.
+                      Use the official external tools below for manual lookup.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {water.surfaceWater.nearbyStations.slice(0, 5).map((station) => (
+                        <div key={station.id} className="border border-hairline bg-surface px-2.5 py-2">
+                          <p className="text-xs font-semibold">{station.name}</p>
+                          <p className="mt-0.5 text-[11px] text-ink-3">{station.type}</p>
+                          <div className="mt-1">
+                            <SourceLine source={station.source} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Section>
+
+                <Section title="Caveats and external tools">
+                  <div className="space-y-1.5">
+                    {water.caveats.slice(0, 5).map((caveat) => (
+                      <p
+                        key={caveat}
+                        className="border border-hairline bg-surface px-2 py-1.5 text-[11px] leading-snug text-ink-2"
+                      >
+                        {caveat}
+                      </p>
+                    ))}
+                  </div>
+                  {water.externalLinks.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {water.externalLinks.map((link) => (
+                        <a
+                          key={link.label}
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 border border-hairline px-2 py-1 text-[11px] font-medium text-ink-2 hover:border-accent hover:text-accent"
+                          title={link.explanation}
+                        >
+                          <ExternalLink size={12} />
+                          {link.label}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </Section>
+              </>
+            ) : (
+              <Section title="Water & drinking water">
+                <Spinner label="Fetching water context…" />
               </Section>
             )}
           </>
