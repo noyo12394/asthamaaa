@@ -58,6 +58,78 @@ export interface AirQualitySnapshot {
   dominantPollutant: string | null;
 }
 
+export interface WaterSystem {
+  name: Sourced<string>;
+  pwsid: Sourced<string | null>;
+  status: Sourced<string>;
+}
+
+export interface WaterViolation {
+  contaminant: string;
+  count: Sourced<number>;
+  period: string;
+}
+
+export interface WaterContaminant {
+  contaminant: string;
+  value: Sourced<string | number | null>;
+  concern: "context" | "watch" | "elevated" | "unknown";
+}
+
+export interface WaterStation {
+  id: string;
+  name: string;
+  type: string;
+  source: SourceRef;
+}
+
+export interface WaterSample {
+  characteristic: string;
+  value: Sourced<string | number | null>;
+  station?: string | null;
+  date?: string | null;
+}
+
+export interface WaterwayAssessment {
+  summary: Sourced<string>;
+}
+
+export interface ExternalWaterLink {
+  label: string;
+  url: string;
+  sourceType: DataStatus | "external-tool" | "archived";
+  explanation: string;
+}
+
+export interface WaterQualitySnapshot {
+  location: {
+    lat: number;
+    lng: number;
+    zip?: string | null;
+    county?: string | null;
+    state?: string | null;
+  };
+  status: DataStatus;
+  fetchedAt: string;
+  drinkingWater: {
+    systems: WaterSystem[];
+    violations: WaterViolation[];
+    contaminants: WaterContaminant[];
+  };
+  surfaceWater: {
+    nearbyStations: WaterStation[];
+    recentSamples: WaterSample[];
+    assessment?: WaterwayAssessment;
+  };
+  pfas: {
+    detections: WaterContaminant[];
+    ucmr5Summary?: Sourced<string>;
+  };
+  externalLinks: ExternalWaterLink[];
+  sources: SourceRef[];
+  caveats: string[];
+}
+
 export interface HourlyPoint {
   time: string;
   pm25: number | null;
