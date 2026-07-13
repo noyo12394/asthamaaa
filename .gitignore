@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# PFAS raw extract too large for normal GitHub blobs; keep the official ZIP.
+data/pfas/raw/UCMR5_All.txt
