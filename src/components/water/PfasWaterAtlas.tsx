@@ -322,7 +322,7 @@ function WaterMap({ samples, state, selected, onSelect, loading }: { samples: Wq
     else map.fitBounds(STATE_BOUNDS[state], { padding: 32, duration: 700 });
   }, [state, ready]);
 
-  return <div className="relative h-[560px] lg:h-full lg:min-h-[680px]"><div ref={container} className="absolute inset-0" />{(loading || !ready) && <div className="absolute inset-0 grid place-items-center bg-surface/75 backdrop-blur-sm"><div className="flex items-center gap-2 text-xs font-medium text-ink-2"><RefreshCw size={15} className="animate-spin" /> Loading official sample records</div></div>}<div className="pointer-events-none absolute bottom-8 left-3 rounded-sm border border-hairline bg-surface/95 px-2.5 py-2 text-[10px] text-ink-2 shadow-md"><strong className="block text-ink">WQP reported coordinates</strong>Point is a monitoring location, not a home.</div></div>;
+  return <div className="relative h-[560px] lg:h-full lg:min-h-[680px]"><div className="absolute inset-0"><div ref={container} className="h-full w-full" /></div>{(loading || !ready) && <div className="absolute inset-0 grid place-items-center bg-surface/75 backdrop-blur-sm"><div className="flex items-center gap-2 text-xs font-medium text-ink-2"><RefreshCw size={15} className="animate-spin" /> Loading official sample records</div></div>}<div className="pointer-events-none absolute bottom-8 left-3 rounded-sm border border-hairline bg-surface/95 px-2.5 py-2 text-[10px] text-ink-2 shadow-md"><strong className="block text-ink">WQP reported coordinates</strong>Point is a monitoring location, not a home.</div></div>;
 }
 
 function Inspector({ sample, onClose }: { sample: WqpPfasSample | null; onClose: () => void }) {
