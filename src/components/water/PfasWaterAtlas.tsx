@@ -66,10 +66,6 @@ function matchesCompound(compound: PfasCompound, filter: CompoundFilter) {
   return compound === filter;
 }
 
-function csvCell(value: unknown) {
-  return `"${String(value ?? "").replaceAll('"', '""')}"`;
-}
-
 function formatResult(sample: WqpPfasSample) {
   if (!sample.detected) return sample.limitNgL == null ? "Not detected" : `< ${sample.limitNgL.toLocaleString()} ng/L`;
   return `${sample.valueNgL?.toLocaleString(undefined, { maximumFractionDigits: 3 })} ng/L`;
@@ -160,21 +156,11 @@ export default function PfasWaterAtlas() {
   const nonDetectCount = filtered.length - detectedCount;
   const locations = new Set(filtered.map((sample) => sample.monitoringLocationId || `${sample.lat},${sample.lng}`)).size;
 
-  const download = () => {
-    const headers = ["source", "state", "location", "sample_date", "compound", "detection_status", "result_ng_L", "reporting_limit_ng_L", "medium", "provider", "latitude", "longitude", "coordinate_precision"];
-    const rows = filtered.map((sample) => [
-      sample.source, sample.state, sample.locationName, sample.date, sample.compound,
-      sample.detected ? "detected" : "non-detect", sample.valueNgL, sample.limitNgL,
-      sample.medium, sample.provider, sample.lat, sample.lng, sample.coordinatePrecision,
-    ]);
-    const csv = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `pass-pfas-water-${state}-${new Date().toISOString().slice(0, 10)}.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
+  const exportUrl = useMemo(() => {
+    const params = new URLSearchParams({ state, compound, detection, year });
+    if (search.trim()) params.set("q", search.trim());
+    return `/api/pfas/export?${params.toString()}`;
+  }, [state, compound, detection, year, search]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-paper">
@@ -197,9 +183,9 @@ export default function PfasWaterAtlas() {
             </div>
             <p className="mt-0.5 text-xs text-ink-3">Five-state measurement explorer · DE, MD, NJ, NY, PA</p>
           </div>
-          <button onClick={download} disabled={!filtered.length} className="inline-flex h-9 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 text-xs font-medium text-ink shadow-sm disabled:opacity-40">
+          <a href={exportUrl} download className={`inline-flex h-9 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 text-xs font-medium text-ink shadow-sm ${!filtered.length ? "pointer-events-none opacity-40" : ""}`}>
             <Download size={15} /> Download filtered CSV
-          </button>
+          </a>
         </div>
         <div className="mx-auto flex max-w-[1600px] gap-6 overflow-x-auto" role="tablist" aria-label="Water data views">
           {([
