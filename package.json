@@ -19,6 +19,7 @@
     "ingest:health": "node scripts/ingest-health.mjs",
     "ingest:vulnerability": "node scripts/ingest-vulnerability.mjs",
     "ingest:population": "node scripts/ingest-population.mjs",
+    "pfas:build": "node scripts/build-pfas-pilot.mjs",
     "ingest": "npm run ingest:counties && npm run ingest:monitors && npm run ingest:health && npm run ingest:vulnerability && npm run ingest:population"
   },
   "dependencies": {

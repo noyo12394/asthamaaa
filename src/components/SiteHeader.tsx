@@ -7,8 +7,8 @@ import { Activity, Database, RadioTower, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/client/api";
 
 const NAV = [
-  { href: "/", label: "Command Map" },
-  { href: "/water-pilot", label: "PFAS Water" },
+  { href: "/", label: "Air Intelligence" },
+  { href: "/water-pilot", label: "Water & PFAS" },
   { href: "/simulator", label: "Sensor Planner" },
   { href: "/compare", label: "Compare" },
   { href: "/outlook", label: "7-Day Outlook" },
