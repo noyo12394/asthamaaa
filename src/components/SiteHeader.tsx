@@ -15,6 +15,7 @@ const NAV = [
   { href: "/watchlist", label: "Watchlist" },
   { href: "/alerts", label: "Alerts" },
   { href: "/clinic", label: "Clinic Mode" },
+  { href: "/water-pilot", label: "PFAS Water" },
   { href: "/methods", label: "Methods" },
 ];
 

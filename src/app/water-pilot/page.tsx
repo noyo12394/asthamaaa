@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import SiteHeader from "@/components/SiteHeader";
 
-// Unlisted pilot: keep it out of search indexes and out of the main nav.
 export const metadata: Metadata = {
-  title: "PFAS Water Pilot (private) · PASS Equity Atlas",
-  description: "Private PFAS data-source feasibility pilot for DE, MD, NJ, NY, PA. Not for public release.",
-  robots: { index: false, follow: false },
+  title: "PFAS Water",
+  description:
+    "PFAS drinking-water awareness pilot for DE, MD, NJ, NY, PA — what PFAS monitoring data exists, how precise it is, and how to read it. No measurements or safety judgments shown yet.",
 };
 
 const GROUPS = [
@@ -58,16 +57,17 @@ export default function WaterPilotPage() {
     <div className="flex min-h-dvh flex-col">
       <SiteHeader />
       <main className="mx-auto w-full max-w-5xl flex-1 space-y-4 px-4 py-6">
-        {/* Pilot banner */}
-        <div className="rounded-sm border border-warning/40 bg-[color:var(--color-warning)]/10 px-4 py-3">
-          <p className="text-sm font-semibold text-[color:var(--color-serious)]">
-            PRIVATE PILOT · pending faculty review — not for public release
+        {/* Awareness banner */}
+        <div className="rounded-sm border border-accent/30 bg-accent-soft px-4 py-3">
+          <p className="text-sm font-semibold text-accent">
+            PFAS awareness pilot · in development
           </p>
           <p className="mt-1 text-xs text-ink-2">
-            This page documents a data-source feasibility study only. It shows <strong>no PFAS
-            measurements</strong>, makes <strong>no safe/unsafe judgment</strong>, and is not linked from the
-            site navigation. Data will appear only after the source datasets are downloaded, validated, and
-            approved for display.
+            This section explains <strong>what PFAS water-monitoring data exists</strong> for these five states
+            and how to read it. It currently shows <strong>no PFAS measurements</strong> and makes <strong>no
+            safe/unsafe judgment</strong> — a labeled, precision-aware map will be added after the source
+            datasets are validated. For your own water, contact your water provider or read its Consumer
+            Confidence Report.
           </p>
         </div>
 
@@ -256,7 +256,8 @@ export default function WaterPilotPage() {
         </Panel>
 
         <p className="pb-4 text-center text-xs text-ink-3">
-          PASS Equity Atlas · PFAS pilot · internal research artifact · do not distribute before faculty review.
+          PASS Equity Atlas · PFAS awareness pilot · framework and data-source review · not medical or
+          regulatory advice.
         </p>
       </main>
     </div>
