@@ -8,6 +8,7 @@ import { api } from "@/lib/client/api";
 
 const NAV = [
   { href: "/", label: "Command Map" },
+  { href: "/water-pilot", label: "PFAS Water" },
   { href: "/simulator", label: "Sensor Planner" },
   { href: "/compare", label: "Compare" },
   { href: "/outlook", label: "7-Day Outlook" },
@@ -15,7 +16,6 @@ const NAV = [
   { href: "/watchlist", label: "Watchlist" },
   { href: "/alerts", label: "Alerts" },
   { href: "/clinic", label: "Clinic Mode" },
-  { href: "/water-pilot", label: "PFAS Water" },
   { href: "/methods", label: "Methods" },
 ];
 
