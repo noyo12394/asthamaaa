@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ChartNoAxesCombined,
   CheckCircle2,
   ChevronRight,
   CircleDot,
@@ -9,6 +10,7 @@ import {
   FlaskConical,
   Info,
   Layers3,
+  LocateFixed,
   Map as MapIcon,
   RefreshCw,
   Search,
@@ -25,8 +27,10 @@ import type {
   UcmrPfasSystem,
   WqpPfasSample,
 } from "@/lib/pfas-types";
+import SearchBox, { type PickedPlace } from "@/components/ui/SearchBox";
+import { distanceKm } from "@/lib/distance";
 
-type View = "map" | "samples" | "ucmr" | "methods";
+type View = "map" | "timeline" | "samples" | "ucmr" | "methods";
 type DetectionFilter = "all" | "detected" | "non-detect";
 type CompoundFilter = "core" | "all" | PfasCompound;
 
@@ -59,6 +63,24 @@ const TOPO_STYLE = {
   },
   layers: [{ id: "topo", type: "raster" as const, source: "topo", paint: { "raster-opacity": 0.9 } }],
 };
+
+const RADIUS_OPTIONS = [0.25, 0.5, 1, 5, 10] as const;
+
+function radiusPolygon(place: PickedPlace, radiusKm: number): GeoJSON.Feature<GeoJSON.Polygon> {
+  const points: [number, number][] = [];
+  const latRadians = (place.lat * Math.PI) / 180;
+  for (let index = 0; index <= 64; index += 1) {
+    const angle = (index / 64) * Math.PI * 2;
+    const lat = place.lat + (radiusKm / 110.574) * Math.sin(angle);
+    const lng = place.lng + (radiusKm / (111.32 * Math.cos(latRadians))) * Math.cos(angle);
+    points.push([lng, lat]);
+  }
+  return {
+    type: "Feature",
+    properties: { radiusKm },
+    geometry: { type: "Polygon", coordinates: [points] },
+  };
+}
 
 function matchesCompound(compound: PfasCompound, filter: CompoundFilter) {
   if (filter === "all") return true;
@@ -99,6 +121,8 @@ export default function PfasWaterAtlas() {
   const [detection, setDetection] = useState<DetectionFilter>("all");
   const [year, setYear] = useState("all");
   const [search, setSearch] = useState("");
+  const [searchPlace, setSearchPlace] = useState<PickedPlace | null>(null);
+  const [radiusKm, setRadiusKm] = useState<number>(5);
   const [selected, setSelected] = useState<WqpPfasSample | null>(null);
   const [tablePage, setTablePage] = useState(0);
 
@@ -117,7 +141,10 @@ export default function PfasWaterAtlas() {
     }
   }, []);
 
-  useEffect(() => void load(), [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   const years = useMemo(
     () => [...new Set(snapshot?.wqpSamples.map((sample) => sample.year).filter(Boolean) ?? [])].sort((a, b) => Number(b) - Number(a)),
@@ -133,9 +160,13 @@ export default function PfasWaterAtlas() {
       if (detection === "non-detect" && sample.detected) return false;
       if (year !== "all" && sample.year !== Number(year)) return false;
       if (query && !`${sample.locationName} ${sample.provider} ${sample.monitoringLocationId}`.toLowerCase().includes(query)) return false;
+      if (
+        searchPlace &&
+        distanceKm(searchPlace.lat, searchPlace.lng, sample.lat, sample.lng) > radiusKm
+      ) return false;
       return true;
     });
-  }, [snapshot, state, compound, detection, year, search]);
+  }, [snapshot, state, compound, detection, year, search, searchPlace, radiusKm]);
 
   const ucmrFiltered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -148,10 +179,6 @@ export default function PfasWaterAtlas() {
     });
   }, [snapshot, state, compound, detection, search]);
 
-  useEffect(() => {
-    setTablePage(0);
-  }, [state, compound, detection, year, search, view]);
-
   const detectedCount = filtered.filter((sample) => sample.detected).length;
   const nonDetectCount = filtered.length - detectedCount;
   const locations = new Set(filtered.map((sample) => sample.monitoringLocationId || `${sample.lat},${sample.lng}`)).size;
@@ -159,8 +186,13 @@ export default function PfasWaterAtlas() {
   const exportUrl = useMemo(() => {
     const params = new URLSearchParams({ state, compound, detection, year });
     if (search.trim()) params.set("q", search.trim());
+    if (searchPlace) {
+      params.set("centerLat", String(searchPlace.lat));
+      params.set("centerLng", String(searchPlace.lng));
+      params.set("radiusKm", String(radiusKm));
+    }
     return `/api/pfas/export?${params.toString()}`;
-  }, [state, compound, detection, year, search]);
+  }, [state, compound, detection, year, search, searchPlace, radiusKm]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-paper">
@@ -174,35 +206,36 @@ export default function PfasWaterAtlas() {
       </div>
 
       <div className="border-b border-hairline bg-surface px-4">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 py-3">
+        <div className="mx-auto flex max-w-[1600px] flex-col items-stretch justify-between gap-3 py-3 sm:flex-row sm:items-center sm:gap-4">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Waves size={20} className="text-[#007f86]" />
               <h1 className="text-lg font-semibold text-ink">Water &amp; PFAS Intelligence</h1>
               <SourceBadge>official public data</SourceBadge>
             </div>
             <p className="mt-0.5 text-xs text-ink-3">Five-state measurement explorer · DE, MD, NJ, NY, PA</p>
           </div>
-          <a href={exportUrl} download className={`inline-flex h-9 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 text-xs font-medium text-ink shadow-sm ${!filtered.length ? "pointer-events-none opacity-40" : ""}`}>
+          <a href={exportUrl} download className={`inline-flex h-9 w-fit items-center gap-2 rounded-sm border border-hairline bg-surface px-3 text-xs font-medium text-ink shadow-sm ${!filtered.length ? "pointer-events-none opacity-40" : ""}`}>
             <Download size={15} /> Download filtered CSV
           </a>
         </div>
         <div className="mx-auto flex max-w-[1600px] gap-6 overflow-x-auto" role="tablist" aria-label="Water data views">
           {([
             ["map", MapIcon, "Measurement map"],
+            ["timeline", ChartNoAxesCombined, "Sampling history"],
             ["samples", TableProperties, "Sample records"],
             ["ucmr", FlaskConical, "UCMR drinking water"],
             ["methods", ShieldQuestion, "Methods & uncertainty"],
           ] as const).map(([id, Icon, label]) => (
-            <button key={id} onClick={() => setView(id)} role="tab" aria-selected={view === id} className={`flex h-10 items-center gap-2 border-b-2 px-1 text-xs font-medium ${view === id ? "border-[#007f86] text-[#006a70]" : "border-transparent text-ink-3 hover:text-ink"}`}>
+            <button key={id} onClick={() => { setView(id); setTablePage(0); }} role="tab" aria-selected={view === id} className={`flex h-10 shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-1 text-xs font-medium ${view === id ? "border-[#007f86] text-[#006a70]" : "border-transparent text-ink-3 hover:text-ink"}`}>
               <Icon size={15} /> {label}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="mx-auto grid w-full max-w-[1600px] grid-cols-2 border-b border-hairline bg-surface md:grid-cols-4">
-        <MiniStat label="Displayed records" value={loading ? "—" : filtered.length.toLocaleString()} detail={`${locations.toLocaleString()} reported locations`} />
+      <div className="mx-auto grid w-full max-w-[1600px] grid-cols-2 border-b border-hairline bg-surface md:grid-cols-4" aria-live="polite">
+        <MiniStat label="Displayed records" value={loading ? "—" : filtered.length.toLocaleString()} detail={searchPlace ? `within ${radiusKm < 1 ? `${radiusKm * 1000} m` : `${radiusKm} km`}` : `${locations.toLocaleString()} reported locations`} />
         <MiniStat label="Reported detections" value={loading ? "—" : detectedCount.toLocaleString()} detail="sample results, not exposure" />
         <MiniStat label="Reported non-detects" value={loading ? "—" : nonDetectCount.toLocaleString()} detail="threshold varies by test" />
         <MiniStat label="UCMR systems" value={loading ? "—" : new Set(ucmrFiltered.map((row) => row.pwsid)).size.toLocaleString()} detail="PFOA / PFOS system records" />
@@ -212,22 +245,49 @@ export default function PfasWaterAtlas() {
         <aside className="w-full shrink-0 border-b border-hairline bg-surface p-4 lg:w-64 lg:border-b-0 lg:border-r">
           <div className="flex items-center justify-between">
             <h2 className="panel-title">Explore measurements</h2>
-            <button onClick={() => { setState("all"); setCompound("core"); setDetection("all"); setYear("all"); setSearch(""); }} className="text-[11px] font-medium text-[#006a70]">Reset</button>
+            <button onClick={() => { setState("all"); setCompound("core"); setDetection("all"); setYear("all"); setSearch(""); setSearchPlace(null); setRadiusKm(5); setTablePage(0); }} className="text-[11px] font-medium text-[#006a70]">Reset</button>
+          </div>
+          <div className="mt-4 rounded-md border border-hairline bg-surface-2 p-3">
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-ink">
+              <LocateFixed size={14} className="text-[#006a70]" /> Search around an address
+            </div>
+            {searchPlace ? (
+              <div>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="min-w-0 text-xs leading-snug text-ink-2">{searchPlace.label}</p>
+                  <button type="button" onClick={() => { setSearchPlace(null); setTablePage(0); }} className="shrink-0 text-[11px] font-medium text-[#006a70]">Clear</button>
+                </div>
+                <FilterSelect
+                  label="Search radius"
+                  value={String(radiusKm)}
+                  onChange={(value) => { setRadiusKm(Number(value)); setTablePage(0); }}
+                  options={RADIUS_OPTIONS.map((value) => ({
+                    value: String(value),
+                    label: value < 1 ? `${value * 1000} meters` : `${value} kilometer${value === 1 ? "" : "s"}`,
+                  }))}
+                />
+                <p className="mt-2 text-[11px] leading-snug text-ink-3">
+                  {filtered.length.toLocaleString()} matching sample records are inside this radius. Your address is geocoded for this search and is not added to the dataset.
+                </p>
+              </div>
+            ) : (
+              <SearchBox placeholder="Home, school, ZIP, or city" onPick={(place) => { setSearchPlace(place); setTablePage(0); }} />
+            )}
           </div>
           <label className="mt-4 block text-[11px] font-medium text-ink-2">Search location or provider</label>
           <div className="relative mt-1">
             <Search size={14} className="absolute left-2.5 top-2.5 text-ink-3" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="e.g. Delaware River" className="h-9 w-full rounded-sm border border-hairline bg-surface pl-8 pr-2 text-xs" />
+            <input value={search} onChange={(event) => { setSearch(event.target.value); setTablePage(0); }} placeholder="e.g. Delaware River" className="h-9 w-full rounded-sm border border-hairline bg-surface pl-8 pr-2 text-xs" />
           </div>
-          <FilterSelect label="State" value={state} onChange={(value) => setState(value as "all" | PfasState)} options={STATES} />
-          <FilterSelect label="PFAS compound" value={compound} onChange={(value) => setCompound(value as CompoundFilter)} options={[
+          <FilterSelect label="State" value={state} onChange={(value) => { setState(value as "all" | PfasState); setTablePage(0); }} options={STATES} />
+          <FilterSelect label="PFAS compound" value={compound} onChange={(value) => { setCompound(value as CompoundFilter); setTablePage(0); }} options={[
             { value: "core", label: "PFOA + PFOS (default)" }, { value: "all", label: "All four downloaded" },
             { value: "PFOA", label: "PFOA" }, { value: "PFOS", label: "PFOS" }, { value: "PFHxS", label: "PFHxS" }, { value: "PFNA", label: "PFNA" },
           ]} />
-          <FilterSelect label="Result" value={detection} onChange={(value) => setDetection(value as DetectionFilter)} options={[
+          <FilterSelect label="Result" value={detection} onChange={(value) => { setDetection(value as DetectionFilter); setTablePage(0); }} options={[
             { value: "all", label: "Detections + non-detects" }, { value: "detected", label: "Reported detections" }, { value: "non-detect", label: "Reported non-detects" },
           ]} />
-          <FilterSelect label="Sample year" value={year} onChange={setYear} options={[{ value: "all", label: "All years" }, ...years.map((value) => ({ value: String(value), label: String(value) }))]} />
+          <FilterSelect label="Sample year" value={year} onChange={(value) => { setYear(value); setTablePage(0); }} options={[{ value: "all", label: "All years" }, ...years.map((value) => ({ value: String(value), label: String(value) }))]} />
 
           <div className="mt-5 border-t border-hairline pt-4">
             <p className="panel-title">Map key</p>
@@ -243,7 +303,9 @@ export default function PfasWaterAtlas() {
           {error ? (
             <div className="grid h-full min-h-[520px] place-items-center p-6"><div className="max-w-sm text-center"><p className="font-medium">Water data did not load</p><p className="mt-1 text-xs text-ink-3">{error}</p><button onClick={load} className="mt-4 inline-flex items-center gap-2 rounded-sm bg-ink px-3 py-2 text-xs font-medium text-white"><RefreshCw size={14} /> Try again</button></div></div>
           ) : view === "map" ? (
-            <WaterMap samples={filtered} state={state} selected={selected} onSelect={setSelected} loading={loading} />
+            <WaterMap samples={filtered} state={state} selected={selected} onSelect={setSelected} loading={loading} searchPlace={searchPlace} radiusKm={radiusKm} />
+          ) : view === "timeline" ? (
+            <SamplingHistory samples={filtered} place={searchPlace} radiusKm={radiusKm} />
           ) : view === "samples" ? (
             <SampleTable samples={filtered} page={tablePage} setPage={setTablePage} onSelect={(sample) => { setSelected(sample); setView("map"); }} />
           ) : view === "ucmr" ? (
@@ -263,7 +325,7 @@ function FilterSelect({ label, value, onChange, options }: { label: string; valu
   return <label className="mt-3 block text-[11px] font-medium text-ink-2">{label}<select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-9 w-full rounded-sm border border-hairline bg-surface px-2 text-xs text-ink">{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
 }
 
-function WaterMap({ samples, state, selected, onSelect, loading }: { samples: WqpPfasSample[]; state: "all" | PfasState; selected: WqpPfasSample | null; onSelect: (sample: WqpPfasSample) => void; loading: boolean }) {
+function WaterMap({ samples, state, selected, onSelect, loading, searchPlace, radiusKm }: { samples: WqpPfasSample[]; state: "all" | PfasState; selected: WqpPfasSample | null; onSelect: (sample: WqpPfasSample) => void; loading: boolean; searchPlace: PickedPlace | null; radiusKm: number }) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const sampleRef = useRef(new Map<string, WqpPfasSample>());
@@ -281,9 +343,14 @@ function WaterMap({ samples, state, selected, onSelect, loading }: { samples: Wq
       map.addControl(new maplibregl.ScaleControl({ unit: "imperial" }), "bottom-left");
       map.on("load", () => {
         map.addSource("pfas-samples", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        map.addSource("search-radius", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        map.addSource("search-center", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        map.addLayer({ id: "search-radius-fill", type: "fill", source: "search-radius", paint: { "fill-color": "#3157b7", "fill-opacity": 0.09 } });
+        map.addLayer({ id: "search-radius-line", type: "line", source: "search-radius", paint: { "line-color": "#3157b7", "line-width": 2, "line-dasharray": [3, 2] } });
         map.addLayer({ id: "pfas-nondetect", type: "circle", source: "pfas-samples", filter: ["==", ["get", "detected"], false], paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 3, 10, 6], "circle-color": "#ffffff", "circle-stroke-color": "#335d7e", "circle-stroke-width": 1.5, "circle-opacity": 0.92 } });
         map.addLayer({ id: "pfas-detected", type: "circle", source: "pfas-samples", filter: ["==", ["get", "detected"], true], paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 4, 10, 7], "circle-color": "#007f86", "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5, "circle-opacity": 0.88 } });
         map.addLayer({ id: "pfas-selected", type: "circle", source: "pfas-samples", filter: ["==", ["get", "id"], ""], paint: { "circle-radius": 11, "circle-color": "rgba(0,0,0,0)", "circle-stroke-color": "#111827", "circle-stroke-width": 2.5 } });
+        map.addLayer({ id: "search-center-point", type: "circle", source: "search-center", paint: { "circle-radius": 7, "circle-color": "#3157b7", "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 } });
         const click = (event: maplibregl.MapMouseEvent) => {
           const feature = map.queryRenderedFeatures(event.point, { layers: ["pfas-detected", "pfas-nondetect"] })[0];
           const id = String(feature?.properties?.id ?? "");
@@ -311,6 +378,34 @@ function WaterMap({ samples, state, selected, onSelect, loading }: { samples: Wq
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
+    const radiusSource = map.getSource("search-radius") as maplibregl.GeoJSONSource;
+    const centerSource = map.getSource("search-center") as maplibregl.GeoJSONSource;
+    if (!searchPlace) {
+      radiusSource.setData({ type: "FeatureCollection", features: [] });
+      centerSource.setData({ type: "FeatureCollection", features: [] });
+      return;
+    }
+    const polygon = radiusPolygon(searchPlace, radiusKm);
+    radiusSource.setData({ type: "FeatureCollection", features: [polygon] });
+    centerSource.setData({
+      type: "FeatureCollection",
+      features: [{
+        type: "Feature",
+        properties: { label: searchPlace.label },
+        geometry: { type: "Point", coordinates: [searchPlace.lng, searchPlace.lat] },
+      }],
+    });
+    const lngDelta = radiusKm / (111.32 * Math.cos((searchPlace.lat * Math.PI) / 180));
+    const latDelta = radiusKm / 110.574;
+    map.fitBounds(
+      [[searchPlace.lng - lngDelta, searchPlace.lat - latDelta], [searchPlace.lng + lngDelta, searchPlace.lat + latDelta]],
+      { padding: 64, duration: 600, maxZoom: 15 }
+    );
+  }, [searchPlace, radiusKm, ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
     map.setFilter("pfas-selected", ["==", ["get", "id"], selected?.id ?? ""]);
     if (selected) map.easeTo({ center: [selected.lng, selected.lat], zoom: Math.max(map.getZoom(), 9), duration: 700 });
   }, [selected, ready]);
@@ -318,11 +413,80 @@ function WaterMap({ samples, state, selected, onSelect, loading }: { samples: Wq
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
+    if (searchPlace) return;
     if (state === "all") map.fitBounds([[-80.8, 37.7], [-71.5, 45.2]], { padding: 32, duration: 700 });
     else map.fitBounds(STATE_BOUNDS[state], { padding: 32, duration: 700 });
-  }, [state, ready]);
+  }, [state, ready, searchPlace]);
 
   return <div className="relative h-[560px] lg:h-full lg:min-h-[680px]"><div className="absolute inset-0"><div ref={container} className="h-full w-full" /></div>{(loading || !ready) && <div className="absolute inset-0 grid place-items-center bg-surface/75 backdrop-blur-sm"><div className="flex items-center gap-2 text-xs font-medium text-ink-2"><RefreshCw size={15} className="animate-spin" /> Loading official sample records</div></div>}<div className="pointer-events-none absolute bottom-8 left-3 rounded-sm border border-hairline bg-surface/95 px-2.5 py-2 text-[10px] text-ink-2 shadow-md"><strong className="block text-ink">WQP reported coordinates</strong>Point is a monitoring location, not a home.</div></div>;
+}
+
+function SamplingHistory({ samples, place, radiusKm }: { samples: WqpPfasSample[]; place: PickedPlace | null; radiusKm: number }) {
+  const rows = useMemo(() => {
+    const byYear = new Map<number, { year: number; records: number; detected: number; locations: Set<string> }>();
+    for (const sample of samples) {
+      if (!sample.year) continue;
+      const row = byYear.get(sample.year) ?? { year: sample.year, records: 0, detected: 0, locations: new Set<string>() };
+      row.records += 1;
+      if (sample.detected) row.detected += 1;
+      row.locations.add(sample.monitoringLocationId || `${sample.lat},${sample.lng}`);
+      byYear.set(sample.year, row);
+    }
+    return [...byYear.values()].sort((a, b) => a.year - b.year);
+  }, [samples]);
+  const maximum = Math.max(1, ...rows.map((row) => row.records));
+
+  return (
+    <div className="h-full overflow-auto bg-surface p-5">
+      <div className="mx-auto max-w-4xl">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-ink">Sampling history</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-3">
+              Annual counts of the currently filtered Water Quality Portal records. This shows when sampling was reported, not a continuous concentration trend: sites, methods, reporting limits, and programs change over time.
+            </p>
+          </div>
+          <SourceBadge>Water Quality Portal</SourceBadge>
+        </div>
+        {place && (
+          <p className="mt-4 rounded-md border border-hairline bg-accent-soft px-3 py-2 text-xs text-ink-2">
+            Showing records within {radiusKm < 1 ? `${radiusKm * 1000} m` : `${radiusKm} km`} of <strong>{place.label}</strong>.
+          </p>
+        )}
+        {rows.length === 0 ? (
+          <div className="mt-12 rounded-md border border-dashed border-baseline p-8 text-center text-sm text-ink-3">
+            No dated samples match these filters. Expand the radius or reset a filter.
+          </div>
+        ) : (
+          <div className="mt-5 overflow-hidden rounded-md border border-hairline">
+            <div className="grid grid-cols-[64px_1fr_100px] border-b border-hairline bg-surface-2 px-3 py-2 text-[10px] font-semibold uppercase text-ink-3">
+              <span>Year</span><span>Reported sample records</span><span className="text-right">Locations</span>
+            </div>
+            {rows.map((row) => (
+              <div key={row.year} className="grid grid-cols-[64px_1fr_100px] items-center border-b border-hairline px-3 py-2.5 last:border-b-0">
+                <span className="tabular text-xs font-semibold">{row.year}</span>
+                <div>
+                  <div className="flex h-3 overflow-hidden rounded-sm bg-surface-2" aria-label={`${row.records} records, ${row.detected} reported detections`}>
+                    <span className="bg-[#007f86]" style={{ width: `${(row.detected / maximum) * 100}%` }} />
+                    <span className="bg-[#b9c9d6]" style={{ width: `${((row.records - row.detected) / maximum) * 100}%` }} />
+                  </div>
+                  <p className="tabular mt-1 text-[10px] text-ink-3">
+                    {row.records.toLocaleString()} records · {row.detected.toLocaleString()} reported detections · {(row.records - row.detected).toLocaleString()} non-detects
+                  </p>
+                </div>
+                <span className="tabular text-right text-xs text-ink-2">{row.locations.size.toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="mt-4 flex flex-wrap gap-4 text-[11px] text-ink-3">
+          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#007f86]" /> Reported detections</span>
+          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#b9c9d6]" /> Reported non-detects</span>
+          <span>Bar length represents record count, not concentration.</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function Inspector({ sample, onClose }: { sample: WqpPfasSample | null; onClose: () => void }) {

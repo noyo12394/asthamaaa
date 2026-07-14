@@ -1,9 +1,9 @@
 "use client";
 
-/** Reusable geocode search input (compare / gaps / clinic pages). */
-import { useEffect, useRef, useState } from "react";
+import { Search } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api } from "@/lib/client/api";
-import { StatusBadge } from "./bits";
+import { Spinner, StatusBadge } from "./bits";
 
 export interface PickedPlace {
   label: string;
@@ -11,61 +11,144 @@ export interface PickedPlace {
   lng: number;
 }
 
+interface GeocodeResult {
+  displayName: string;
+  lat: number;
+  lng: number;
+  source: { status: string };
+}
+
 export default function SearchBox({
-  placeholder = "Search a place…",
+  placeholder = "Search a place...",
   onPick,
 }: {
   placeholder?: string;
   onPick: (place: PickedPlace) => void;
 }) {
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState<
-    { displayName: string; lat: number; lng: number; source: { status: string } }[] | null
-  >(null);
+  const id = useId();
+  const listId = `${id}-results`;
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<GeocodeResult[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [activeIndex, setActiveIndex] = useState(-1);
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     clearTimeout(debounce.current);
-    if (q.trim().length < 2) return;
+    if (query.trim().length < 2) return;
     debounce.current = setTimeout(async () => {
+      setLoading(true);
       try {
-        const d = await api<{ results: typeof results }>(`/api/geocode?q=${encodeURIComponent(q)}`);
-        setResults(d.results);
+        const data = await api<{ results: GeocodeResult[] }>(
+          `/api/geocode?q=${encodeURIComponent(query)}`
+        );
+        setResults(data.results);
       } catch {
         setResults([]);
+        setError("Search is temporarily unavailable.");
+      } finally {
+        setLoading(false);
       }
     }, 300);
     return () => clearTimeout(debounce.current);
-  }, [q]);
+  }, [query]);
 
-  const shown = q.trim().length >= 2 ? results : null;
+  const open = query.trim().length >= 2 && (loading || results !== null);
+
+  function pick(result: GeocodeResult) {
+    onPick({ label: result.displayName, lat: result.lat, lng: result.lng });
+    setQuery("");
+    setResults(null);
+    setActiveIndex(-1);
+  }
 
   return (
     <div className="relative w-full max-w-sm">
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder={placeholder}
-        className="w-full border border-hairline bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent"
+      <Search
+        size={15}
+        aria-hidden="true"
+        className="pointer-events-none absolute top-2.5 left-2.5 z-[1] text-ink-3"
       />
-      {shown && (
-        <ul className="absolute z-10 mt-0.5 w-full border border-hairline bg-surface shadow-md">
-          {shown.length === 0 && <li className="px-2.5 py-2 text-xs text-ink-3">No matches.</li>}
-          {shown.map((r, i) => (
-            <li key={i}>
-              <button
-                className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-sm hover:bg-accent-soft"
-                onClick={() => {
-                  onPick({ label: r.displayName, lat: r.lat, lng: r.lng });
-                  setQ("");
-                  setResults(null);
-                }}
+      <input
+        value={query}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setActiveIndex(-1);
+          setError("");
+          setResults(null);
+          setLoading(false);
+        }}
+        onKeyDown={(event) => {
+          if (!results?.length) {
+            if (event.key === "Escape") setResults(null);
+            return;
+          }
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setActiveIndex((index) => Math.min(results.length - 1, index + 1));
+          } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setActiveIndex((index) => Math.max(0, index - 1));
+          } else if (event.key === "Enter" && activeIndex >= 0) {
+            event.preventDefault();
+            pick(results[activeIndex]);
+          } else if (event.key === "Escape") {
+            setResults(null);
+            setActiveIndex(-1);
+          }
+        }}
+        placeholder={placeholder}
+        role="combobox"
+        aria-label={placeholder}
+        aria-autocomplete="list"
+        aria-controls={listId}
+        aria-expanded={open}
+        aria-activedescendant={activeIndex >= 0 ? `${id}-option-${activeIndex}` : undefined}
+        className="h-10 w-full rounded-md border border-hairline bg-surface pr-9 pl-8 text-sm shadow-sm outline-none focus:border-accent"
+      />
+      {loading && (
+        <span className="absolute top-2.5 right-2.5" aria-hidden="true">
+          <Spinner />
+        </span>
+      )}
+      <span className="sr-only" role="status" aria-live="polite">
+        {loading
+          ? "Searching"
+          : error || (results ? `${results.length} search results` : "")}
+      </span>
+      {open && !loading && (
+        <ul
+          id={listId}
+          role="listbox"
+          className="absolute z-40 mt-1 max-h-72 w-full overflow-y-auto rounded-md border border-hairline bg-surface p-1 shadow-xl"
+        >
+          {error ? (
+            <li className="px-2.5 py-2 text-xs text-critical">{error}</li>
+          ) : results?.length === 0 ? (
+            <li className="px-2.5 py-2 text-xs text-ink-3">No matching places found.</li>
+          ) : (
+            results?.map((result, index) => (
+              <li
+                key={`${result.lat},${result.lng},${result.displayName}`}
+                id={`${id}-option-${index}`}
+                role="option"
+                aria-selected={activeIndex === index}
               >
-                <span>{r.displayName}</span>
-                <StatusBadge status={r.source.status} />
-              </button>
-            </li>
-          ))}
+                <button
+                  type="button"
+                  className={`flex w-full items-center justify-between gap-3 rounded-sm px-2.5 py-2 text-left text-sm ${
+                    activeIndex === index ? "bg-accent-soft" : "hover:bg-surface-2"
+                  }`}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => pick(result)}
+                >
+                  <span className="min-w-0 truncate">{result.displayName}</span>
+                  <StatusBadge status={result.source.status} />
+                </button>
+              </li>
+            ))
+          )}
         </ul>
       )}
     </div>

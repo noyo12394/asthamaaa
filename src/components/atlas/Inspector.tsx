@@ -6,7 +6,7 @@
  * source trail. Tabs keep it dense but navigable.
  */
 import { useEffect, useState } from "react";
-import { Droplets, ExternalLink } from "lucide-react";
+import { AlertTriangle, Droplets, ExternalLink, RefreshCw } from "lucide-react";
 import { api } from "@/lib/client/api";
 import { aqiChip } from "@/lib/client/colors";
 import { formatDistance, type DistanceUnit } from "@/lib/distance";
@@ -137,11 +137,14 @@ export default function Inspector({
   } | null>(null);
   const [countyState, setCountyState] = useState<{ key: string; data: CountyProfile } | null>(null);
   const [trailState, setTrailState] = useState<{ key: string; data: TrailData } | null>(null);
+  const [loadError, setLoadError] = useState<{ key: string; message: string } | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   const key = selected
     ? `${selected.lat.toFixed(5)},${selected.lng.toFixed(5)}|${profile.age}|${profile.conditions.join(",")}`
     : null;
-  const loading = Boolean(key) && main?.key !== key;
+  const failed = loadError?.key === key;
+  const loading = Boolean(key) && main?.key !== key && !failed;
   const aq = main?.key === key ? main.aq : null;
   const water = main?.key === key ? main.water : null;
   const resolve = main?.key === key ? main.resolve : null;
@@ -181,14 +184,19 @@ export default function Inspector({
         setMain({ key, aq: aqD, water: waterD ?? fallbackWater(lat, lng), resolve: resD, risk: riskD });
         if (trailD) setTrailState({ key, data: trailD });
         if (countyD) setCountyState({ key, data: countyD });
-      } catch {
-        /* keep the panel calm; freshness page shows failures */
+      } catch (error) {
+        if (!stale) {
+          setLoadError({
+            key,
+            message: error instanceof Error ? error.message : "Location data could not be loaded",
+          });
+        }
       }
     })();
     return () => {
       stale = true;
     };
-  }, [selected, profile, key, main]);
+  }, [selected, profile, key, main, attempt]);
 
   if (!selected) {
     return (
@@ -250,6 +258,20 @@ export default function Inspector({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {failed && (
+          <div className="m-3 rounded-md border border-critical/30 bg-critical/5 p-3" role="alert">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0 text-critical" />
+              <div>
+                <p className="text-xs font-semibold text-ink">Location data is unavailable</p>
+                <p className="mt-1 text-[11px] leading-snug text-ink-3">{loadError?.message}</p>
+                <button type="button" onClick={() => { setLoadError(null); setAttempt((value) => value + 1); }} className="mt-2 inline-flex items-center gap-1.5 rounded-sm border border-hairline bg-surface px-2 py-1 text-[11px] font-medium text-ink-2">
+                  <RefreshCw size={12} /> Try again
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {loading && (
           <div className="p-4">
             <Spinner label="Fetching from backend…" />

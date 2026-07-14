@@ -29,27 +29,24 @@ confidence level. This file documents each source and how it enters the system.
   geometry (coordinates rounded to 3 dp ≈ 110 m — display/containment, not legal).
 - Refresh: `npm run ingest:counties`.
 
-### Monitor metadata — `fallback` seed until ingested
-- Real target: AirNow `monitoring_site_locations.dat` (official, no key).
-  Refresh: `npm run ingest:monitors`.
-- Committed seed: synthetic placements at county centroids (dense in the
-  Mid-Atlantic focus region, sparse elsewhere), `status: "fallback"`, surfaced as
-  an amber badge and in every nearest-monitor answer.
+### Monitor metadata — `official`
+- AirNow `Monitoring_Site_Locations_V2.dat` (official metadata, no key), with
+  active sites grouped across reported pollutants. Refresh: `npm run ingest:monitors`.
+- AirNow information is preliminary; PASS monitor-distance bands are context
+  heuristics, not EPA siting or confidence standards.
 
-### County health indicators — `fallback` seed until ingested
-- Real target: CDC PLACES county release via Socrata (`npm run ingest:health`);
+### County health indicators — `official`
+- CDC PLACES county releases via Socrata (`npm run ingest:health`);
   measures: asthma, COPD, diabetes, hypertension, CHD, obesity, cancer
   (model-based prevalence, adults 18+).
-- Committed seed: published national baseline prevalence with deterministic
-  per-county perturbation (FIPS-seeded). **Not county-specific measurements** —
-  labeled as such at the file, API, and UI layers.
+- The 2025 release is primary. Its chronic-condition fields are blank for 187
+  Pennsylvania/Kentucky counties, so those profiles use the official 2024
+  release and carry `year: "2024 release fallback"`. No synthetic substitution.
 
-### County vulnerability indicators — `fallback` seed until ingested
-- Real target: CDC/ATSDR SVI 2022 county CSV (`npm run ingest:vulnerability`);
+### County vulnerability indicators — `official`
+- CDC/ATSDR SVI 2022 county CSV (`npm run ingest:vulnerability`);
   overall percentile (RPL_THEMES) + poverty, 65+, ≤17, disability, limited
   English, no vehicle.
-- Committed seed: national baseline shares with deterministic perturbation and a
-  synthetic `svi` percentile; same labeling rules.
 
 ## Honesty rules encoded in the platform
 

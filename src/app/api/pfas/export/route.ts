@@ -1,5 +1,6 @@
 import snapshot from "@/data/pfas-pilot.json";
 import type { PfasPilotSnapshot, WqpPfasSample } from "@/lib/pfas-types";
+import { distanceKm } from "@/lib/distance";
 
 const data = snapshot as PfasPilotSnapshot;
 
@@ -20,6 +21,15 @@ export async function GET(request: Request) {
   const detection = params.get("detection") ?? "all";
   const year = params.get("year") ?? "all";
   const query = (params.get("q") ?? "").trim().toLowerCase();
+  const centerLat = Number(params.get("centerLat"));
+  const centerLng = Number(params.get("centerLng"));
+  const radiusKm = Number(params.get("radiusKm"));
+  const hasRadius =
+    Number.isFinite(centerLat) &&
+    Number.isFinite(centerLng) &&
+    Number.isFinite(radiusKm) &&
+    radiusKm > 0 &&
+    radiusKm <= 10;
 
   const samples = data.wqpSamples.filter((sample) => {
     if (state !== "all" && sample.state !== state) return false;
@@ -27,6 +37,7 @@ export async function GET(request: Request) {
     if (detection === "detected" && !sample.detected) return false;
     if (detection === "non-detect" && sample.detected) return false;
     if (year !== "all" && sample.year !== Number(year)) return false;
+    if (hasRadius && distanceKm(centerLat, centerLng, sample.lat, sample.lng) > radiusKm) return false;
     return !query || `${sample.locationName} ${sample.provider} ${sample.monitoringLocationId}`.toLowerCase().includes(query);
   });
 

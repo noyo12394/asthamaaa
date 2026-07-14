@@ -202,7 +202,7 @@ export default function ClinicPage() {
                   {es
                     ? "Informativo — no sustituye el consejo médico."
                     : "Informational — not a substitute for medical advice."}{" "}
-                  PASS Equity Atlas · pass-equity-atlas.vercel.app/methods
+                  PASS Equity Atlas · asthamaaa.vercel.app/methods
                 </p>
               </footer>
             </article>

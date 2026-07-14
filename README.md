@@ -6,7 +6,7 @@ there** (county health & social vulnerability), **where the equity burden concen
 and **what to do next** — with a source trail behind every number and an AI agent that
 interprets the data without inventing any of it.
 
-Live: https://pass-equity-atlas.vercel.app
+Live: https://asthamaaa.vercel.app
 
 ## What it does
 
@@ -15,6 +15,10 @@ Live: https://pass-equity-atlas.vercel.app
   county health-vulnerability extrusions, equity-burden choropleth, alert-priority
   cells, and unverified community reports. 2D / 2.5D / 3D modes, search + fly-to,
   click-to-inspect, layer legend, hourly timeline drawer with a scrub slider.
+- **Water & PFAS Intelligence** — five-state Water Quality Portal measurement map,
+  address-centered 250 m–10 km radius search, sampling-history view, record table,
+  filtered CSV download, and EPA UCMR 5 public-water-system summaries. Non-detects,
+  detection limits, coordinate precision, and scientific limits remain visible.
 - **Location Inspector** — snapshot AQI/PM2.5/ozone/NO₂, nearest monitor + distance +
   coverage rating, county health & vulnerability profile, transparent 0–100 alert
   priority with per-component bars, and a full **source trail** tab (source, status,
@@ -108,10 +112,10 @@ npm run seed         # load counties/monitors/health/vulnerability snapshots
 
 ### Refreshing the data snapshots
 
-Committed snapshots in `src/data/` are labeled with their provenance. Counties are
-real US Census boundaries; monitors/health/vulnerability ship as **clearly-labeled
-fallback seeds** until you run the real ingestions (needs network access to the
-agencies):
+Committed snapshots in `src/data/` are labeled with their provenance. The production
+snapshots currently contain US Census county boundaries, the AirNow monitoring-site
+feed, CDC PLACES county health estimates, and CDC/ATSDR SVI. Re-run the ingestions to
+refresh them (network access to the agencies is required):
 
 ```bash
 npm run ingest:counties        # US Census cartographic boundaries (already real)
@@ -140,9 +144,9 @@ npm run lint && npm run typecheck
 - Air quality is **model output** (Open-Meteo/CAMS), not monitor readings; the AQI
   shown is an hourly snapshot, not a 24-hour regulatory value. Monitor distance is
   surfaced everywhere precisely because it bounds how verifiable the model is.
-- Monitor/health/vulnerability snapshots ship as labeled fallback seeds until the
-  ingestion scripts are run against the real agencies (see above). The UI shows an
-  amber `FALLBACK` badge wherever such values appear.
+- CDC PLACES 2025 has blank chronic-condition fields for Pennsylvania and Kentucky;
+  those 187 county profiles use the official 2024 release and carry a per-record
+  vintage. No synthetic values are substituted.
 - Without `DATABASE_URL`, user records are per-instance and non-durable (the UI
   says so). Without `OPENAI_API_KEY`, the agent is deterministic (labeled).
 - Alert delivery is in-app only; email/SMS integration is stubbed by design.
