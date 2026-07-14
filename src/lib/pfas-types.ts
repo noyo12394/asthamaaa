@@ -60,3 +60,40 @@ export interface PfasPilotSnapshot {
   ucmrSystems: UcmrPfasSystem[];
   ucmrStateSummary: UcmrStateSummary[];
 }
+
+export interface UsgsWaterHistoryPoint {
+  time: string;
+  value: number;
+}
+
+export interface UsgsWaterReading {
+  code: string;
+  label: string;
+  value: number;
+  unit: string;
+  observedAt: string;
+  provisional: boolean;
+  history: UsgsWaterHistoryPoint[];
+}
+
+export interface UsgsWaterStation {
+  siteCode: string;
+  name: string;
+  lat: number;
+  lng: number;
+  distanceKm: number;
+  freshness: "fresh" | "recent" | "stale";
+  latestObservedAt: string;
+  readings: UsgsWaterReading[];
+  sourceUrl: string;
+}
+
+export interface UsgsWaterSnapshot {
+  status: "live" | "unavailable";
+  fetchedAt: string;
+  radiusKm: number;
+  stations: UsgsWaterStation[];
+  sourceUrl: string;
+  caveats: string[];
+  servedFromCache: boolean;
+}

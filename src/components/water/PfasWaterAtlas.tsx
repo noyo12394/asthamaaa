@@ -1,19 +1,23 @@
 "use client";
 
 import {
+  Activity,
   ChartNoAxesCombined,
   ChartPie,
   CheckCircle2,
   ChevronRight,
   CircleDot,
+  Cloud,
   Download,
   ExternalLink,
   FlaskConical,
+  Footprints,
   Info,
   LayoutDashboard,
   Layers3,
   LocateFixed,
   Map as MapIcon,
+  Mountain,
   MoveHorizontal,
   Navigation,
   RefreshCw,
@@ -29,12 +33,14 @@ import type {
   PfasPilotSnapshot,
   PfasState,
   UcmrPfasSystem,
+  UsgsWaterSnapshot,
+  UsgsWaterStation,
   WqpPfasSample,
 } from "@/lib/pfas-types";
 import SearchBox, { type PickedPlace } from "@/components/ui/SearchBox";
 import { distanceKm } from "@/lib/distance";
 
-type View = "map" | "snapshot" | "timeline" | "samples" | "ucmr" | "methods";
+type View = "map" | "snapshot" | "live" | "pathways" | "timeline" | "samples" | "ucmr" | "methods";
 type DetectionFilter = "all" | "detected" | "non-detect";
 type CompoundFilter = "core" | "all" | PfasCompound;
 
@@ -280,6 +286,8 @@ export default function PfasWaterAtlas() {
           {([
             ["map", MapIcon, "Measurement map"],
             ["snapshot", LayoutDashboard, "Water snapshot"],
+            ["live", Activity, "Water now"],
+            ["pathways", Footprints, "Exposure pathways"],
             ["timeline", ChartNoAxesCombined, "Sampling history"],
             ["samples", TableProperties, "Sample records"],
             ["ucmr", FlaskConical, "UCMR drinking water"],
@@ -300,7 +308,7 @@ export default function PfasWaterAtlas() {
       </div>
 
       <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col lg:min-h-[680px] lg:flex-row">
-        <aside className={`w-full shrink-0 border-b border-hairline bg-surface p-4 lg:w-64 lg:border-b-0 lg:border-r ${view === "snapshot" ? "order-2 lg:order-none" : ""}`}>
+        <aside className={`w-full shrink-0 border-b border-hairline bg-surface p-4 lg:w-64 lg:border-b-0 lg:border-r ${view === "snapshot" || view === "live" || view === "pathways" ? "order-2 lg:order-none" : ""}`}>
           <div className="flex items-center justify-between">
             <h2 className="panel-title">Explore measurements</h2>
             <button onClick={() => { setState("all"); setCompound("core"); setDetection("all"); setYear("all"); setSearch(""); setSearchPlace(null); setRadiusKm(5); setTablePage(0); }} className="text-[11px] font-medium text-[#006a70]">Reset</button>
@@ -381,7 +389,7 @@ export default function PfasWaterAtlas() {
           </div>}
         </aside>
 
-        <main className={`min-w-0 flex-1 bg-[#e9efed] ${view === "snapshot" ? "order-1 lg:order-none" : ""}`}>
+        <main className={`min-w-0 flex-1 bg-[#e9efed] ${view === "snapshot" || view === "live" || view === "pathways" ? "order-1 lg:order-none" : ""}`}>
           {error ? (
             <div className="grid h-full min-h-[520px] place-items-center p-6"><div className="max-w-sm text-center"><p className="font-medium">Water data did not load</p><p className="mt-1 text-xs text-ink-3">{error}</p><button onClick={load} className="mt-4 inline-flex items-center gap-2 rounded-sm bg-ink px-3 py-2 text-xs font-medium text-white"><RefreshCw size={14} /> Try again</button></div></div>
           ) : view === "map" ? (
@@ -407,6 +415,10 @@ export default function PfasWaterAtlas() {
               nearestReadings={nearestReadings}
               onViewChange={(nextView) => { setView(nextView); setTablePage(0); }}
             />
+          ) : view === "live" ? (
+            <LiveWaterView key={searchPlace ? `${searchPlace.lat}:${searchPlace.lng}` : "no-place"} place={searchPlace} />
+          ) : view === "pathways" ? (
+            <ExposurePathwaysView onViewChange={(nextView) => { setView(nextView); setTablePage(0); }} />
           ) : view === "timeline" ? (
             <SamplingHistory samples={filtered} place={searchPlace} radiusKm={radiusKm} />
           ) : view === "samples" ? (
@@ -549,6 +561,113 @@ function HorizontalCountBar({ label, count, maximum }: { label: string; count: n
 function EmptyVisual({ text }: { text: string }) {
   return <div className="grid min-h-28 place-items-center rounded-sm border border-dashed border-baseline px-4 text-center text-xs text-ink-3">{text}</div>;
 }
+
+function LiveWaterView({ place }: { place: PickedPlace | null }) {
+  const [snapshot, setSnapshot] = useState<UsgsWaterSnapshot | null>(null);
+  const [selectedSite, setSelectedSite] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    if (!place) return;
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/water/live?lat=${place.lat}&lng=${place.lng}&radiusKm=50`);
+      const body = await response.json();
+      if (!response.ok || !body.ok) throw new Error(body.error ?? "USGS water data could not be loaded");
+      const next = body.data as UsgsWaterSnapshot;
+      setSnapshot(next);
+      setSelectedSite((current) => next.stations.some((station) => station.siteCode === current) ? current : next.stations[0]?.siteCode ?? "");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "USGS water data could not be loaded");
+    } finally {
+      setLoading(false);
+    }
+  }, [place]);
+
+  useEffect(() => {
+    if (!place) return;
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [place, load]);
+
+  if (!place) {
+    return <div className="grid min-h-[620px] place-items-center bg-paper p-6"><div className="max-w-md text-center"><Activity size={38} className="mx-auto text-[#007f86]" /><h2 className="mt-4 text-lg font-semibold text-ink">Search a location to open Water Now</h2><p className="mt-2 text-sm leading-relaxed text-ink-3">The app will find nearby USGS continuous sensors and show available streamflow, gage height, temperature, conductance, pH, dissolved oxygen, and turbidity readings.</p><p className="mt-3 text-xs leading-relaxed text-ink-3">These are current waterway conditions, not live PFAS or household tap-water measurements.</p></div></div>;
+  }
+
+  if (loading && !snapshot) return <div className="grid min-h-[620px] place-items-center bg-paper"><div className="flex items-center gap-2 text-sm text-ink-2"><RefreshCw size={16} className="animate-spin" /> Finding nearby USGS sensors</div></div>;
+  if (error && !snapshot) return <div className="grid min-h-[620px] place-items-center bg-paper p-6"><div className="max-w-sm text-center"><p className="font-semibold text-ink">Live water context is temporarily unavailable</p><p className="mt-2 text-xs text-ink-3">{error}</p><button type="button" onClick={() => void load()} className="mt-4 inline-flex h-9 items-center gap-2 rounded-sm bg-[#006a70] px-3 text-xs font-semibold text-white"><RefreshCw size={14} /> Try again</button></div></div>;
+
+  const station = snapshot?.stations.find((item) => item.siteCode === selectedSite) ?? snapshot?.stations[0] ?? null;
+  if (snapshot && snapshot.stations.length === 0) return <div className="grid min-h-[620px] place-items-center bg-paper p-6"><div className="max-w-md text-center"><Activity size={36} className="mx-auto text-baseline" /><h2 className="mt-3 text-lg font-semibold text-ink">No continuous USGS readings found within 50 km</h2><p className="mt-2 text-xs leading-relaxed text-ink-3">This is a sensor-coverage gap, not a statement about local water quality. Discrete WQP and UCMR records remain available in their separate views.</p></div></div>;
+
+  return (
+    <div className="h-full overflow-auto bg-paper p-4 md:p-6">
+      <div className="mx-auto max-w-6xl">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+          <div><div className="flex items-center gap-2"><Activity size={19} className="text-[#007f86]" /><h2 className="text-lg font-semibold text-ink">Water Now</h2><SourceBadge>USGS provisional</SourceBadge></div><p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-3">Continuous hydrologic readings near {place.label}. Parameters vary by station and are shown only when reported.</p></div>
+          <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex h-9 w-fit items-center gap-2 rounded-sm border border-hairline bg-surface px-3 text-xs font-semibold text-ink disabled:opacity-50"><RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Refresh</button>
+        </div>
+
+        <div className="mt-4 rounded-md border border-[#cadfdc] bg-[#edf7f5] p-3 text-xs leading-relaxed text-[#315a57]"><strong>Different evidence type:</strong> these sensors describe current river or stream conditions. They do not measure PFAS in real time, estimate tap-water exposure, or replace laboratory sampling.</div>
+
+        <div className="mt-4 flex snap-x gap-2 overflow-x-auto pb-2" aria-label="Nearby USGS stations">
+          {snapshot?.stations.map((item) => <button key={item.siteCode} type="button" onClick={() => setSelectedSite(item.siteCode)} className={`w-64 shrink-0 snap-start rounded-md border p-3 text-left ${station?.siteCode === item.siteCode ? "border-[#007f86] bg-[#edf7f5]" : "border-hairline bg-surface"}`}><div className="flex items-center justify-between gap-2"><span className="text-[10px] font-semibold uppercase text-ink-3">USGS {item.siteCode}</span><FreshnessBadge freshness={item.freshness} /></div><p className="mt-2 line-clamp-2 text-xs font-semibold text-ink">{item.name}</p><p className="mt-1 text-[10px] text-ink-3">{formatDistance(item.distanceKm)} away · {item.readings.length} parameter{item.readings.length === 1 ? "" : "s"}</p></button>)}
+        </div>
+
+        {station && <div className="mt-3">
+          <section className="border border-hairline bg-surface p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><div className="flex flex-wrap items-center gap-2"><h3 className="text-base font-semibold text-ink">{station.name}</h3><FreshnessBadge freshness={station.freshness} /></div><p className="mt-1 text-xs text-ink-3">USGS {station.siteCode} · {formatDistance(station.distanceKm)} from search · latest available {formatObservationTime(station.latestObservedAt)}</p></div><a href={station.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#006a70]">Open USGS station <ExternalLink size={13} /></a></div></section>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{station.readings.map((reading) => <LiveReadingCard key={reading.code} reading={reading} />)}</div>
+        </div>}
+
+        <div className="mt-4 grid gap-3 border-t border-hairline pt-4 sm:grid-cols-3">{snapshot?.caveats.map((caveat) => <p key={caveat} className="text-[10px] leading-relaxed text-ink-3">{caveat}</p>)}</div>
+      </div>
+    </div>
+  );
+}
+
+function FreshnessBadge({ freshness }: { freshness: UsgsWaterStation["freshness"] }) {
+  const classes = freshness === "fresh" ? "bg-[#dcefdc] text-[#28622e]" : freshness === "recent" ? "bg-[#fff0c9] text-[#755300]" : "bg-surface-2 text-ink-3";
+  return <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase ${classes}`}>{freshness}</span>;
+}
+
+function formatObservationTime(value: string) {
+  if (!value) return "unknown";
+  return new Date(value).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function LiveReadingCard({ reading }: { reading: UsgsWaterStation["readings"][number] }) {
+  const values = reading.history.map((point) => point.value);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const spread = Math.max(0.0001, maximum - minimum);
+  return <article className="border border-hairline bg-surface p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase text-ink-3">{reading.label}</p><p className="mt-1 text-2xl font-semibold tabular text-ink">{reading.value.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p><p className="text-xs text-ink-3">{reading.unit}</p></div>{reading.provisional && <span className="rounded-full border border-hairline px-2 py-0.5 text-[9px] font-semibold text-ink-3">Provisional</span>}</div><div className="mt-4 flex h-14 items-end gap-0.5" aria-label={`Last 24 hours of ${reading.label}`}>{reading.history.map((point, index) => <span key={`${point.time}-${index}`} className="min-w-0 flex-1 rounded-t-[1px] bg-[#5c8db7]" style={{ height: `${12 + ((point.value - minimum) / spread) * 44}px` }} title={`${formatObservationTime(point.time)}: ${point.value} ${reading.unit}`} />)}</div><div className="mt-2 flex items-center justify-between text-[9px] text-ink-3"><span>Previous 24 hours</span><span>{formatObservationTime(reading.observedAt)}</span></div></article>;
+}
+
+function ExposurePathwaysView({ onViewChange }: { onViewChange: (view: View) => void }) {
+  const rows = [
+    { pollutant: "PFAS", note: "Persistent compounds; drinking water is often an important route.", water: ["Measured here", "WQP + UCMR"], air: ["Not measured here", "Do not infer from AQI"], dust: ["Evidence context", "No local dust results"] },
+    { pollutant: "Lead", note: "Can occur across drinking water, air emissions, soil, paint, and household dust.", water: ["Not yet loaded", "Needs lead-specific data"], air: ["Separate air pathway", "No cross-media estimate"], dust: ["Important pathway", "No local dust results"] },
+    { pollutant: "Volatile chemicals", note: "Some chemicals in household water can transfer to indoor air during water use.", water: ["Not yet loaded", "Needs VOC measurements"], air: ["Possible transfer", "Requires a formal model"], dust: ["Not primary here", "Chemical-specific"] },
+  ];
+  return <div className="h-full overflow-auto bg-paper p-4 md:p-6"><div className="mx-auto max-w-6xl"><div className="flex items-center gap-2"><Footprints size={19} className="text-[#007f86]" /><h2 className="text-lg font-semibold text-ink">Cross-media exposure pathways</h2></div><p className="mt-1 max-w-3xl text-xs leading-relaxed text-ink-3">A research-oriented map of what is measured, what is scientifically plausible, and what the app cannot currently establish. Pathway presence does not prove that exposure occurred.</p>
+
+    <p className="mt-4 inline-flex items-center gap-1.5 text-[10px] font-medium text-ink-3 md:hidden"><MoveHorizontal size={13} /> Swipe to compare environmental media</p>
+    <div className="mt-2 grid grid-cols-[minmax(130px,1fr)_repeat(3,minmax(180px,1.1fr))] overflow-x-auto border border-hairline bg-surface md:mt-5">
+      <div className="border-b border-r border-hairline p-3 text-[10px] font-semibold uppercase text-ink-3">Pollutant</div><PathwayHeader icon={Waves} label="Water" /><PathwayHeader icon={Cloud} label="Air" /><PathwayHeader icon={Mountain} label="Dust & soil" />
+      {rows.map((row) => <div key={row.pollutant} className="contents"><div className="border-b border-r border-hairline p-3"><p className="text-sm font-semibold text-ink">{row.pollutant}</p><p className="mt-1 text-[10px] leading-relaxed text-ink-3">{row.note}</p></div><PathwayCell title={row.water[0]} detail={row.water[1]} active={row.water[0] === "Measured here"} /><PathwayCell title={row.air[0]} detail={row.air[1]} /><PathwayCell title={row.dust[0]} detail={row.dust[1]} /></div>)}
+    </div>
+
+    <section className="mt-5 border border-hairline bg-surface p-4"><h3 className="text-sm font-semibold text-ink">Evidence ladder for a searched location</h3><div className="mt-4 grid gap-2 md:grid-cols-4"><EvidenceStep number="1" title="Current conditions" detail="USGS hydrology sensors" status="Live context" /><EvidenceStep number="2" title="Environmental samples" detail="WQP laboratory records" status="Measured" /><EvidenceStep number="3" title="Public water system" detail="EPA UCMR records" status="System-level" /><EvidenceStep number="4" title="Personal exposure" detail="Requires household or biomonitoring evidence" status="Not inferred" /></div><div className="mt-4 flex flex-wrap gap-2"><button type="button" onClick={() => onViewChange("live")} className="inline-flex h-9 items-center gap-2 rounded-sm bg-[#006a70] px-3 text-xs font-semibold text-white"><Activity size={14} /> Open Water Now</button><button type="button" onClick={() => onViewChange("map")} className="inline-flex h-9 items-center gap-2 rounded-sm border border-hairline px-3 text-xs font-semibold text-ink"><MapIcon size={14} /> Open measurements</button><a href="https://www.atsdr.cdc.gov/pha-guidance/conducting_scientific_evaluations/exposure_pathways/exposure_routes.html" target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-sm border border-hairline px-3 text-xs font-semibold text-ink">ATSDR pathway guidance <ExternalLink size={13} /></a></div></section>
+
+    <div className="mt-4 grid gap-3 sm:grid-cols-3"><MethodCard title="No media conversion" text="An air measurement is never converted into a water concentration, and a water result is never converted into an air exposure." /><MethodCard title="No causal attribution" text="Proximity to a facility, sample, or sensor does not establish the source of a contaminant or a person's exposure." /><MethodCard title="EJScreen replacement discipline" text="Current equity context uses CDC/ATSDR SVI. Archived EJScreen resources are clearly labeled and are not treated as live EPA data." /></div>
+  </div></div>;
+}
+
+function PathwayHeader({ icon: Icon, label }: { icon: typeof Waves; label: string }) { return <div className="flex items-center gap-2 border-b border-r border-hairline p-3 text-xs font-semibold text-ink last:border-r-0"><Icon size={15} className="text-[#007f86]" />{label}</div>; }
+function PathwayCell({ title, detail, active = false }: { title: string; detail: string; active?: boolean }) { return <div className={`border-b border-r border-hairline p-3 last:border-r-0 ${active ? "bg-[#edf7f5]" : ""}`}><span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] font-semibold ${active ? "bg-[#d9eeec] text-[#006a70]" : "bg-surface-2 text-ink-3"}`}>{title}</span><p className="mt-2 text-[10px] leading-relaxed text-ink-3">{detail}</p></div>; }
+function EvidenceStep({ number, title, detail, status }: { number: string; title: string; detail: string; status: string }) { return <div className="relative border border-hairline p-3"><span className="grid h-6 w-6 place-items-center rounded-full bg-[#e6eef5] text-[10px] font-semibold text-[#335d7e]">{number}</span><p className="mt-3 text-xs font-semibold text-ink">{title}</p><p className="mt-1 text-[10px] text-ink-3">{detail}</p><p className="mt-3 text-[9px] font-semibold uppercase text-[#006a70]">{status}</p></div>; }
 
 function WaterMap({ samples, state, selected, onSelect, loading, searchPlace, radiusKm, nearestSampleKm, onExpandToNearest }: { samples: WqpPfasSample[]; state: "all" | PfasState; selected: WqpPfasSample | null; onSelect: (sample: WqpPfasSample) => void; loading: boolean; searchPlace: PickedPlace | null; radiusKm: number; nearestSampleKm: number | null; onExpandToNearest: () => void }) {
   const container = useRef<HTMLDivElement>(null);

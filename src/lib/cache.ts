@@ -63,5 +63,6 @@ export const TTL = {
   airQualityCurrent: 10 * 60 * 1000, // 10 min
   airQualityHistory: 30 * 60 * 1000, // 30 min
   waterQualityCurrent: 60 * 60 * 1000, // 1h — official water sources change slowly
+  waterLive: 10 * 60 * 1000, // 10 min — USGS provisional continuous observations
   mapCells: 10 * 60 * 1000, // 10 min
 } as const;

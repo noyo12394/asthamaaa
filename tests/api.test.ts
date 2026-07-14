@@ -2,7 +2,7 @@
  * Route-handler tests: handlers are plain functions taking a NextRequest,
  * so they can be invoked directly without a server.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { GET as geocodeGet } from "@/app/api/geocode/route";
 import { GET as resolveGet } from "@/app/api/location/resolve/route";
@@ -13,6 +13,7 @@ import { GET as riskGet } from "@/app/api/risk-score/route";
 import { GET as cellsGet } from "@/app/api/map/cells/route";
 import { GET as trailGet } from "@/app/api/source-trail/route";
 import { GET as pfasExportGet } from "@/app/api/pfas/export/route";
+import { GET as liveWaterGet } from "@/app/api/water/live/route";
 import { POST as agentPost } from "@/app/api/agent/route";
 
 const req = (url: string, init?: RequestInit) =>
@@ -106,6 +107,36 @@ describe("API routes", () => {
     expect(narrowRows).toHaveLength(1);
     expect(expandedRows.length).toBeGreaterThan(1);
     expect(expanded.headers.get("content-disposition")).toContain("pass-pfas-water");
+  });
+
+  it("live water route normalizes provisional USGS sensor readings", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({
+      value: {
+        timeSeries: [{
+          sourceInfo: {
+            siteName: "Test Creek at Testville",
+            siteCode: [{ value: "01234567" }],
+            geoLocation: { geogLocation: { latitude: 40.61, longitude: -75.45 } },
+          },
+          variable: { variableCode: [{ value: "00010" }], noDataValue: -999999 },
+          values: [{ value: [
+            { value: "18.1", dateTime: "2026-07-14T00:00:00-04:00", qualifiers: ["P"] },
+            { value: "18.4", dateTime: "2026-07-14T00:15:00-04:00", qualifiers: ["P"] },
+          ] }],
+        }],
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    try {
+      const response = await liveWaterGet(req("/api/water/live?lat=40.6&lng=-75.47&radiusKm=20"));
+      const body = await response.json();
+      expect(body.ok).toBe(true);
+      expect(body.data.status).toBe("live");
+      expect(body.data.stations[0].siteCode).toBe("01234567");
+      expect(body.data.stations[0].readings[0]).toMatchObject({ label: "Water temperature", value: 18.4, unit: "°C", provisional: true });
+      expect(fetchSpy.mock.calls[0][0]).toContain("period=P1D");
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 
   it("agent answers a location question with tool calls (offline mode)", async () => {
