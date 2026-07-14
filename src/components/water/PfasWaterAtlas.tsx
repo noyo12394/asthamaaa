@@ -12,6 +12,8 @@ import {
   Layers3,
   LocateFixed,
   Map as MapIcon,
+  MoveHorizontal,
+  Navigation,
   RefreshCw,
   Search,
   ShieldQuestion,
@@ -64,7 +66,22 @@ const TOPO_STYLE = {
   layers: [{ id: "topo", type: "raster" as const, source: "topo", paint: { "raster-opacity": 0.9 } }],
 };
 
-const RADIUS_OPTIONS = [0.25, 0.5, 1, 5, 10] as const;
+const MAX_RADIUS_KM = 250;
+const QUICK_RADIUS_OPTIONS = [5, 10, 25, 50] as const;
+
+interface NearbyReading {
+  sample: WqpPfasSample;
+  distanceKm: number;
+}
+
+function formatDistance(km: number) {
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${Number.isInteger(km) ? km.toFixed(0) : km.toFixed(1)} km`;
+}
+
+function radiusForDistance(distance: number) {
+  return Math.min(MAX_RADIUS_KM, Math.ceil((distance + 0.1) * 4) / 4);
+}
 
 function radiusPolygon(place: PickedPlace, radiusKm: number): GeoJSON.Feature<GeoJSON.Polygon> {
   const points: [number, number][] = [];
@@ -175,14 +192,27 @@ export default function PfasWaterAtlas() {
     [candidateSamples, searchPlace, radiusKm]
   );
 
-  const nearestSampleKm = useMemo(() => {
-    if (!searchPlace || candidateSamples.length === 0) return null;
-    return Math.min(
-      ...candidateSamples.map((sample) =>
-        distanceKm(searchPlace.lat, searchPlace.lng, sample.lat, sample.lng)
-      )
-    );
+  const nearestReadings = useMemo<NearbyReading[]>(() => {
+    if (!searchPlace) return [];
+    return candidateSamples
+      .map((sample) => ({
+        sample,
+        distanceKm: distanceKm(searchPlace.lat, searchPlace.lng, sample.lat, sample.lng),
+      }))
+      .sort((left, right) => left.distanceKm - right.distanceKm)
+      .slice(0, 8);
   }, [candidateSamples, searchPlace]);
+  const nearestSampleKm = nearestReadings[0]?.distanceKm ?? null;
+  const radiusSliderMax = Math.min(
+    MAX_RADIUS_KM,
+    Math.max(50, radiusKm, Math.ceil((nearestSampleKm ?? 50) / 25) * 25)
+  );
+
+  const includeNearest = useCallback(() => {
+    if (nearestSampleKm == null || nearestSampleKm > MAX_RADIUS_KM) return;
+    setRadiusKm(radiusForDistance(nearestSampleKm));
+    setTablePage(0);
+  }, [nearestSampleKm]);
 
   const ucmrFiltered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -260,7 +290,7 @@ export default function PfasWaterAtlas() {
       </div>
 
       <div className="mx-auto grid w-full max-w-[1600px] grid-cols-2 border-b border-hairline bg-surface md:grid-cols-4" aria-live="polite">
-        <MiniStat label={showingUcmr ? "UCMR summaries" : "Nearby WQP records"} value={loading ? "—" : (showingUcmr ? ucmrFiltered.length : filtered.length).toLocaleString()} detail={showingUcmr ? "system / compound rows" : searchPlace ? `within ${radiusKm < 1 ? `${radiusKm * 1000} m` : `${radiusKm} km`}` : `${locations.toLocaleString()} reported locations`} />
+        <MiniStat label={showingUcmr ? "UCMR summaries" : "Nearby WQP records"} value={loading ? "—" : (showingUcmr ? ucmrFiltered.length : filtered.length).toLocaleString()} detail={showingUcmr ? "system / compound rows" : searchPlace ? `within ${formatDistance(radiusKm)}` : `${locations.toLocaleString()} reported locations`} />
         <MiniStat label="Reported detections" value={loading ? "—" : (showingUcmr ? ucmrDetectionCount : detectedCount).toLocaleString()} detail="sample results, not exposure" />
         <MiniStat label="Reported non-detects" value={loading ? "—" : (showingUcmr ? ucmrNonDetectCount : nonDetectCount).toLocaleString()} detail="threshold varies by test" />
         <MiniStat label="UCMR systems" value={loading ? "—" : ucmrSystemCount.toLocaleString()} detail={showingUcmr ? "address radius not applied" : "separate system records"} />
@@ -282,15 +312,30 @@ export default function PfasWaterAtlas() {
                   <p className="min-w-0 text-xs leading-snug text-ink-2">{searchPlace.label}</p>
                   <button type="button" onClick={() => { setSearchPlace(null); setTablePage(0); }} className="shrink-0 text-[11px] font-medium text-[#006a70]">Clear</button>
                 </div>
-                <FilterSelect
-                  label="Search radius"
-                  value={String(radiusKm)}
-                  onChange={(value) => { setRadiusKm(Number(value)); setTablePage(0); }}
-                  options={RADIUS_OPTIONS.map((value) => ({
-                    value: String(value),
-                    label: value < 1 ? `${value * 1000} meters` : `${value} kilometer${value === 1 ? "" : "s"}`,
-                  }))}
-                />
+                <div className="mt-3">
+                  <div className="flex items-center justify-between gap-3 text-[11px] font-medium text-ink-2">
+                    <label htmlFor="water-radius">Search radius</label>
+                    <span className="tabular text-ink">{formatDistance(radiusKm)}</span>
+                  </div>
+                  <input
+                    id="water-radius"
+                    type="range"
+                    min="0.25"
+                    max={radiusSliderMax}
+                    step="0.25"
+                    value={radiusKm}
+                    aria-valuetext={formatDistance(radiusKm)}
+                    onChange={(event) => { setRadiusKm(Number(event.target.value)); setTablePage(0); }}
+                    className="mt-2 h-6 w-full cursor-ew-resize accent-[#007f86]"
+                  />
+                  <div className="mt-1 flex gap-1.5 overflow-x-auto pb-1">
+                    {QUICK_RADIUS_OPTIONS.map((value) => (
+                      <button key={value} type="button" onClick={() => { setRadiusKm(value); setTablePage(0); }} className={`h-7 shrink-0 rounded-sm border px-2 text-[10px] font-medium ${radiusKm === value ? "border-[#007f86] bg-[#edf7f5] text-[#006a70]" : "border-hairline bg-surface text-ink-2"}`}>
+                        {value} km
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <p className="mt-2 text-[11px] leading-snug text-ink-3">
                   {filtered.length > 0 ? (
                     <>{filtered.length.toLocaleString()} matching WQP sample records are inside this radius.</>
@@ -298,6 +343,11 @@ export default function PfasWaterAtlas() {
                     <>No matching WQP sample records are inside this radius. This is a sampling-data gap, not a zero result or a safety finding.{nearestSampleKm != null && ` The nearest matching record is about ${nearestSampleKm.toFixed(1)} km away.`}</>
                   )}{" "}Your address is geocoded for this search and is not added to the dataset.
                 </p>
+                {filtered.length === 0 && nearestSampleKm != null && nearestSampleKm <= MAX_RADIUS_KM && (
+                  <button type="button" onClick={includeNearest} className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-sm bg-[#006a70] px-3 text-xs font-semibold text-white shadow-sm">
+                    <Navigation size={14} /> Include nearest at {formatDistance(nearestSampleKm)}
+                  </button>
+                )}
               </div>
             ) : (
               <SearchBox placeholder="Home, school, ZIP, or city" onPick={(place) => { setSearchPlace(place); setTablePage(0); }} />
@@ -332,7 +382,19 @@ export default function PfasWaterAtlas() {
           {error ? (
             <div className="grid h-full min-h-[520px] place-items-center p-6"><div className="max-w-sm text-center"><p className="font-medium">Water data did not load</p><p className="mt-1 text-xs text-ink-3">{error}</p><button onClick={load} className="mt-4 inline-flex items-center gap-2 rounded-sm bg-ink px-3 py-2 text-xs font-medium text-white"><RefreshCw size={14} /> Try again</button></div></div>
           ) : view === "map" ? (
-            <WaterMap samples={filtered} state={state} selected={selected} onSelect={setSelected} loading={loading} searchPlace={searchPlace} radiusKm={radiusKm} nearestSampleKm={nearestSampleKm} />
+            <div className="flex h-full flex-col">
+              <WaterMap samples={filtered} state={state} selected={selected} onSelect={setSelected} loading={loading} searchPlace={searchPlace} radiusKm={radiusKm} nearestSampleKm={nearestSampleKm} onExpandToNearest={includeNearest} />
+              {searchPlace && nearestReadings.length > 0 && (
+                <NearestReadingsTray
+                  readings={nearestReadings}
+                  radiusKm={radiusKm}
+                  onOpen={({ sample, distanceKm: sampleDistance }) => {
+                    if (sampleDistance > radiusKm) setRadiusKm(radiusForDistance(sampleDistance));
+                    setSelected(sample);
+                  }}
+                />
+              )}
+            </div>
           ) : view === "timeline" ? (
             <SamplingHistory samples={filtered} place={searchPlace} radiusKm={radiusKm} />
           ) : view === "samples" ? (
@@ -354,7 +416,7 @@ function FilterSelect({ label, value, onChange, options }: { label: string; valu
   return <label className="mt-3 block text-[11px] font-medium text-ink-2">{label}<select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-9 w-full rounded-sm border border-hairline bg-surface px-2 text-xs text-ink">{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
 }
 
-function WaterMap({ samples, state, selected, onSelect, loading, searchPlace, radiusKm, nearestSampleKm }: { samples: WqpPfasSample[]; state: "all" | PfasState; selected: WqpPfasSample | null; onSelect: (sample: WqpPfasSample) => void; loading: boolean; searchPlace: PickedPlace | null; radiusKm: number; nearestSampleKm: number | null }) {
+function WaterMap({ samples, state, selected, onSelect, loading, searchPlace, radiusKm, nearestSampleKm, onExpandToNearest }: { samples: WqpPfasSample[]; state: "all" | PfasState; selected: WqpPfasSample | null; onSelect: (sample: WqpPfasSample) => void; loading: boolean; searchPlace: PickedPlace | null; radiusKm: number; nearestSampleKm: number | null; onExpandToNearest: () => void }) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const sampleRef = useRef(new Map<string, WqpPfasSample>());
@@ -447,7 +509,40 @@ function WaterMap({ samples, state, selected, onSelect, loading, searchPlace, ra
     else map.fitBounds(STATE_BOUNDS[state], { padding: 32, duration: 700 });
   }, [state, ready, searchPlace]);
 
-  return <div className="relative h-[560px] lg:h-full lg:min-h-[680px]"><div className="absolute inset-0"><div ref={container} className="h-full w-full" /></div>{(loading || !ready) && <div className="absolute inset-0 grid place-items-center bg-surface/75 backdrop-blur-sm"><div className="flex items-center gap-2 text-xs font-medium text-ink-2"><RefreshCw size={15} className="animate-spin" /> Loading official sample records</div></div>}{searchPlace && samples.length === 0 && !loading && ready && <div className="absolute left-1/2 top-3 z-10 w-[min(92%,440px)] -translate-x-1/2 rounded-md border border-hairline bg-surface/95 p-3 shadow-lg backdrop-blur"><p className="text-xs font-semibold text-ink">No WQP sample records in this radius</p><p className="mt-1 text-[11px] leading-relaxed text-ink-3">This indicates missing nearby records in this dataset, not zero PFAS or safe water.{nearestSampleKm != null && ` The nearest matching WQP record is about ${nearestSampleKm.toFixed(1)} km away.`}</p></div>}<div className="pointer-events-none absolute bottom-8 left-3 rounded-sm border border-hairline bg-surface/95 px-2.5 py-2 text-[10px] text-ink-2 shadow-md"><strong className="block text-ink">WQP reported coordinates</strong>Point is a monitoring location, not a home.</div></div>;
+  return <div className="relative h-[560px] lg:h-full lg:min-h-[680px]"><div className="absolute inset-0"><div ref={container} className="h-full w-full" /></div>{(loading || !ready) && <div className="absolute inset-0 grid place-items-center bg-surface/75 backdrop-blur-sm"><div className="flex items-center gap-2 text-xs font-medium text-ink-2"><RefreshCw size={15} className="animate-spin" /> Loading official sample records</div></div>}{searchPlace && samples.length === 0 && !loading && ready && <div className="absolute left-1/2 top-3 z-10 w-[min(92%,440px)] -translate-x-1/2 rounded-md border border-hairline bg-surface/95 p-3 shadow-lg backdrop-blur"><p className="text-xs font-semibold text-ink">No WQP sample records in this radius</p><p className="mt-1 text-[11px] leading-relaxed text-ink-3">This indicates missing nearby records in this dataset, not zero PFAS or safe water.{nearestSampleKm != null && ` The nearest matching WQP record is about ${formatDistance(nearestSampleKm)} away.`}</p>{nearestSampleKm != null && nearestSampleKm <= MAX_RADIUS_KM && <button type="button" onClick={onExpandToNearest} className="mt-2 inline-flex h-8 items-center gap-2 rounded-sm bg-[#006a70] px-3 text-[11px] font-semibold text-white"><Navigation size={13} /> Expand radius to nearest</button>}</div>}<div className="pointer-events-none absolute bottom-8 left-3 rounded-sm border border-hairline bg-surface/95 px-2.5 py-2 text-[10px] text-ink-2 shadow-md"><strong className="block text-ink">WQP reported coordinates</strong>Point is a monitoring location, not a home.</div></div>;
+}
+
+function NearestReadingsTray({ readings, radiusKm, onOpen }: { readings: NearbyReading[]; radiusKm: number; onOpen: (reading: NearbyReading) => void }) {
+  return (
+    <section className="border-t border-hairline bg-surface px-4 py-3" aria-labelledby="nearest-readings-title">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h2 id="nearest-readings-title" className="text-xs font-semibold text-ink">Nearest matching WQP readings</h2>
+          <p className="mt-0.5 text-[10px] leading-relaxed text-ink-3">Distance is from the searched point to a reported monitoring location. These readings do not represent a home tap.</p>
+        </div>
+        <span className="hidden shrink-0 items-center gap-1.5 text-[10px] font-medium text-ink-3 sm:inline-flex"><MoveHorizontal size={13} /> Swipe to compare</span>
+      </div>
+      <div className="mt-3 flex snap-x snap-mandatory gap-2.5 overflow-x-auto pb-2" tabIndex={0} aria-label="Nearest readings carousel">
+        {readings.map((reading, index) => {
+          const outsideRadius = reading.distanceKm > radiusKm;
+          return (
+            <button key={reading.sample.id} type="button" onClick={() => onOpen(reading)} className="w-[250px] shrink-0 snap-start rounded-md border border-hairline bg-surface p-3 text-left shadow-sm transition hover:border-baseline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007f86]">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase text-ink-3">#{index + 1} · {formatDistance(reading.distanceKm)}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[9px] font-semibold ${reading.sample.detected ? "bg-[#d9eeec] text-[#006a70]" : "border border-[#b9c9d6] bg-white text-[#335d7e]"}`}>{reading.sample.detected ? "Reported detection" : "Non-detect"}</span>
+              </div>
+              <p className="mt-2 text-base font-semibold tabular text-ink">{formatResult(reading.sample)}</p>
+              <p className="mt-1 truncate text-xs font-medium text-ink-2" title={reading.sample.locationName}>{reading.sample.locationName}</p>
+              <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-ink-3">
+                <span>{reading.sample.compound} · {reading.sample.date || "Date unavailable"}</span>
+                <span className="inline-flex items-center gap-1 font-medium text-[#006a70]">{outsideRadius ? "Expand & view" : "View"}<ChevronRight size={12} /></span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function SamplingHistory({ samples, place, radiusKm }: { samples: WqpPfasSample[]; place: PickedPlace | null; radiusKm: number }) {
@@ -479,7 +574,7 @@ function SamplingHistory({ samples, place, radiusKm }: { samples: WqpPfasSample[
         </div>
         {place && (
           <p className="mt-4 rounded-md border border-hairline bg-accent-soft px-3 py-2 text-xs text-ink-2">
-            Showing records within {radiusKm < 1 ? `${radiusKm * 1000} m` : `${radiusKm} km`} of <strong>{place.label}</strong>.
+            Showing records within {formatDistance(radiusKm)} of <strong>{place.label}</strong>.
           </p>
         )}
         {rows.length === 0 ? (

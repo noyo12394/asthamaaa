@@ -12,6 +12,7 @@ import { GET as nearestGet } from "@/app/api/nearest-monitor/route";
 import { GET as riskGet } from "@/app/api/risk-score/route";
 import { GET as cellsGet } from "@/app/api/map/cells/route";
 import { GET as trailGet } from "@/app/api/source-trail/route";
+import { GET as pfasExportGet } from "@/app/api/pfas/export/route";
 import { POST as agentPost } from "@/app/api/agent/route";
 
 const req = (url: string, init?: RequestInit) =>
@@ -93,6 +94,18 @@ describe("API routes", () => {
     expect(fields.join(" ")).toMatch(/air quality/i);
     expect(fields.join(" ")).toMatch(/monitor/i);
     expect(fields.join(" ")).toMatch(/county/i);
+  });
+
+  it("PFAS export preserves an expanded address radius", async () => {
+    const center = "centerLat=40.6259&centerLng=-75.3705&compound=core";
+    const narrow = await pfasExportGet(req(`/api/pfas/export?${center}&radiusKm=10`));
+    const expanded = await pfasExportGet(req(`/api/pfas/export?${center}&radiusKm=20`));
+    const narrowRows = (await narrow.text()).trim().split("\n");
+    const expandedRows = (await expanded.text()).trim().split("\n");
+
+    expect(narrowRows).toHaveLength(1);
+    expect(expandedRows.length).toBeGreaterThan(1);
+    expect(expanded.headers.get("content-disposition")).toContain("pass-pfas-water");
   });
 
   it("agent answers a location question with tool calls (offline mode)", async () => {

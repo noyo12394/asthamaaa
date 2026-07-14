@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     Number.isFinite(centerLng) &&
     Number.isFinite(radiusKm) &&
     radiusKm > 0 &&
-    radiusKm <= 10;
+    radiusKm <= 250;
 
   const samples = data.wqpSamples.filter((sample) => {
     if (state !== "all" && sample.state !== state) return false;
