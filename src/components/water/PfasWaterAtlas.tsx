@@ -2,6 +2,7 @@
 
 import {
   ChartNoAxesCombined,
+  ChartPie,
   CheckCircle2,
   ChevronRight,
   CircleDot,
@@ -9,6 +10,7 @@ import {
   ExternalLink,
   FlaskConical,
   Info,
+  LayoutDashboard,
   Layers3,
   LocateFixed,
   Map as MapIcon,
@@ -32,7 +34,7 @@ import type {
 import SearchBox, { type PickedPlace } from "@/components/ui/SearchBox";
 import { distanceKm } from "@/lib/distance";
 
-type View = "map" | "timeline" | "samples" | "ucmr" | "methods";
+type View = "map" | "snapshot" | "timeline" | "samples" | "ucmr" | "methods";
 type DetectionFilter = "all" | "detected" | "non-detect";
 type CompoundFilter = "core" | "all" | PfasCompound;
 
@@ -277,6 +279,7 @@ export default function PfasWaterAtlas() {
         <div className="mx-auto flex max-w-[1600px] gap-6 overflow-x-auto" role="tablist" aria-label="Water data views">
           {([
             ["map", MapIcon, "Measurement map"],
+            ["snapshot", LayoutDashboard, "Water snapshot"],
             ["timeline", ChartNoAxesCombined, "Sampling history"],
             ["samples", TableProperties, "Sample records"],
             ["ucmr", FlaskConical, "UCMR drinking water"],
@@ -297,7 +300,7 @@ export default function PfasWaterAtlas() {
       </div>
 
       <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col lg:min-h-[680px] lg:flex-row">
-        <aside className="w-full shrink-0 border-b border-hairline bg-surface p-4 lg:w-64 lg:border-b-0 lg:border-r">
+        <aside className={`w-full shrink-0 border-b border-hairline bg-surface p-4 lg:w-64 lg:border-b-0 lg:border-r ${view === "snapshot" ? "order-2 lg:order-none" : ""}`}>
           <div className="flex items-center justify-between">
             <h2 className="panel-title">Explore measurements</h2>
             <button onClick={() => { setState("all"); setCompound("core"); setDetection("all"); setYear("all"); setSearch(""); setSearchPlace(null); setRadiusKm(5); setTablePage(0); }} className="text-[11px] font-medium text-[#006a70]">Reset</button>
@@ -368,17 +371,17 @@ export default function PfasWaterAtlas() {
           ]} />
           <FilterSelect label="Sample year" value={year} onChange={(value) => { setYear(value); setTablePage(0); }} options={[{ value: "all", label: "All years" }, ...years.map((value) => ({ value: String(value), label: String(value) }))]} />
 
-          <div className="mt-5 border-t border-hairline pt-4">
+          {view === "map" && <div className="mt-5 border-t border-hairline pt-4">
             <p className="panel-title">Map key</p>
             <div className="mt-3 space-y-3 text-xs text-ink-2">
               <div className="flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-[#007f86] shadow-[0_0_0_2px_white,0_0_0_3px_#006a70]" /> Reported detection</div>
               <div className="flex items-center gap-2"><span className="h-3 w-3 rounded-full border-2 border-[#335d7e] bg-white" /> Reported non-detect</div>
               <p className="leading-relaxed text-ink-3">Symbol color identifies result status only. It does not communicate safety or regulatory compliance.</p>
             </div>
-          </div>
+          </div>}
         </aside>
 
-        <main className="min-w-0 flex-1 bg-[#e9efed]">
+        <main className={`min-w-0 flex-1 bg-[#e9efed] ${view === "snapshot" ? "order-1 lg:order-none" : ""}`}>
           {error ? (
             <div className="grid h-full min-h-[520px] place-items-center p-6"><div className="max-w-sm text-center"><p className="font-medium">Water data did not load</p><p className="mt-1 text-xs text-ink-3">{error}</p><button onClick={load} className="mt-4 inline-flex items-center gap-2 rounded-sm bg-ink px-3 py-2 text-xs font-medium text-white"><RefreshCw size={14} /> Try again</button></div></div>
           ) : view === "map" ? (
@@ -395,6 +398,15 @@ export default function PfasWaterAtlas() {
                 />
               )}
             </div>
+          ) : view === "snapshot" ? (
+            <WaterSnapshot
+              samples={filtered}
+              candidates={candidateSamples}
+              place={searchPlace}
+              radiusKm={radiusKm}
+              nearestReadings={nearestReadings}
+              onViewChange={(nextView) => { setView(nextView); setTablePage(0); }}
+            />
           ) : view === "timeline" ? (
             <SamplingHistory samples={filtered} place={searchPlace} radiusKm={radiusKm} />
           ) : view === "samples" ? (
@@ -414,6 +426,128 @@ export default function PfasWaterAtlas() {
 
 function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ value: string; label: string }> }) {
   return <label className="mt-3 block text-[11px] font-medium text-ink-2">{label}<select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-9 w-full rounded-sm border border-hairline bg-surface px-2 text-xs text-ink">{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+}
+
+function WaterSnapshot({ samples, candidates, place, radiusKm, nearestReadings, onViewChange }: { samples: WqpPfasSample[]; candidates: WqpPfasSample[]; place: PickedPlace | null; radiusKm: number; nearestReadings: NearbyReading[]; onViewChange: (view: View) => void }) {
+  const displaySamples = samples.length > 0 ? samples : nearestReadings.map((reading) => reading.sample);
+  const usingNearestFallback = Boolean(place && samples.length === 0 && displaySamples.length > 0);
+  const uniqueSites = new Set(samples.map((sample) => sample.monitoringLocationId)).size;
+  const latestDate = [...samples].map((sample) => sample.date).filter(Boolean).sort().at(-1) ?? "No date in scope";
+
+  const distanceBands = place
+    ? [10, 25, 50, 100].map((limit) => ({
+        label: `Within ${limit} km`,
+        count: candidates.filter((sample) => distanceKm(place.lat, place.lng, sample.lat, sample.lng) <= limit).length,
+      }))
+    : STATES.slice(1).map(({ value, label }) => ({
+        label,
+        count: candidates.filter((sample) => sample.state === value).length,
+      }));
+  const distanceMaximum = Math.max(1, ...distanceBands.map((band) => band.count));
+
+  const compounds = (["PFOA", "PFOS", "PFHxS", "PFNA"] as PfasCompound[])
+    .map((name) => {
+      const rows = displaySamples.filter((sample) => sample.compound === name);
+      return { name, total: rows.length, detected: rows.filter((sample) => sample.detected).length };
+    })
+    .filter((row) => row.total > 0);
+  const compoundMaximum = Math.max(1, ...compounds.map((row) => row.total));
+
+  const activityByYear = new Map<number, number>();
+  for (const sample of displaySamples) {
+    if (sample.year) activityByYear.set(sample.year, (activityByYear.get(sample.year) ?? 0) + 1);
+  }
+  const years = [...activityByYear.entries()].sort(([left], [right]) => left - right).slice(-10);
+  const yearMaximum = Math.max(1, ...years.map(([, count]) => count));
+
+  const providerCounts = new Map<string, number>();
+  for (const sample of displaySamples) providerCounts.set(sample.provider, (providerCounts.get(sample.provider) ?? 0) + 1);
+  const providers = [...providerCounts.entries()].sort((left, right) => right[1] - left[1]).slice(0, 5);
+  const providerMaximum = Math.max(1, ...providers.map(([, count]) => count));
+
+  return (
+    <div className="h-full overflow-auto bg-paper p-4 md:p-6">
+      <div className="mx-auto max-w-6xl">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+          <div>
+            <div className="flex items-center gap-2"><ChartPie size={18} className="text-[#007f86]" /><h2 className="text-lg font-semibold text-ink">Water data snapshot</h2></div>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-3">A visual summary of sampling coverage, result status, timing, and provenance. It describes records in the selected filters, not household exposure or water safety.</p>
+          </div>
+          <SourceBadge>WQP validated snapshot</SourceBadge>
+        </div>
+
+        {usingNearestFallback && (
+          <div className="mt-4 rounded-md border border-[#d8d5c6] bg-[#fffdf3] p-3 text-xs leading-relaxed text-[#5d5638]">
+            <strong>No records are inside {formatDistance(radiusKm)}.</strong> The composition visuals below use the eight nearest matching records for context; distance-band counts still show the full filtered dataset. This does not change the map radius.
+          </div>
+        )}
+
+        <div className="mt-4 grid grid-cols-2 border border-hairline bg-surface sm:grid-cols-4">
+          <SnapshotMetric label="Records in radius" value={samples.length.toLocaleString()} detail={place ? formatDistance(radiusKm) : "current filters"} />
+          <SnapshotMetric label="Monitoring sites" value={uniqueSites.toLocaleString()} detail="reported identifiers" />
+          <SnapshotMetric label="Nearest record" value={nearestReadings[0] ? formatDistance(nearestReadings[0].distanceKm) : "—"} detail={place ? "straight-line distance" : "search an address"} />
+          <SnapshotMetric label="Latest in radius" value={latestDate} detail="sample date, not live" />
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <SnapshotPanel title={place ? "Sampling coverage by distance" : "Sampling records by state"} subtitle={place ? `Cumulative counts around ${place.label}` : "Current filter distribution across the five-state pilot"}>
+            <div className="space-y-3">
+              {distanceBands.map((band) => <HorizontalCountBar key={band.label} label={band.label} count={band.count} maximum={distanceMaximum} />)}
+            </div>
+            <p className="mt-4 text-[10px] leading-relaxed text-ink-3">A low count indicates sparse records in this downloaded dataset. It is not evidence of low contamination.</p>
+          </SnapshotPanel>
+
+          <SnapshotPanel title="Compound and result mix" subtitle={usingNearestFallback ? "Eight nearest matching records" : "Records inside the current scope"}>
+            {compounds.length ? <div className="space-y-3">{compounds.map((row) => (
+              <div key={row.name}>
+                <div className="mb-1 flex items-center justify-between text-[11px]"><span className="font-semibold text-ink">{row.name}</span><span className="tabular text-ink-3">{row.detected} detected · {row.total - row.detected} non-detect</span></div>
+                <div className="flex h-3 overflow-hidden rounded-sm bg-surface-2" style={{ width: `${Math.max(12, (row.total / compoundMaximum) * 100)}%` }}><span className="bg-[#007f86]" style={{ width: `${(row.detected / row.total) * 100}%` }} /><span className="bg-[#b9c9d6]" style={{ width: `${((row.total - row.detected) / row.total) * 100}%` }} /></div>
+              </div>
+            ))}</div> : <EmptyVisual text="No compound records match these filters." />}
+            <div className="mt-4 flex gap-4 text-[10px] text-ink-3"><span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 bg-[#007f86]" />Reported detection</span><span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 bg-[#b9c9d6]" />Non-detect</span></div>
+          </SnapshotPanel>
+
+          <SnapshotPanel title="Sampling activity" subtitle="Reported records by sample year; not a concentration trend">
+            {years.length ? <div className="flex h-40 items-end gap-2 border-b border-hairline pt-3">{years.map(([sampleYear, count]) => (
+              <div key={sampleYear} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1"><span className="tabular text-[9px] text-ink-3">{count}</span><div className="w-full max-w-8 rounded-t-sm bg-[#5c8db7]" style={{ height: `${Math.max(6, (count / yearMaximum) * 108)}px` }} /><span className="tabular text-[9px] text-ink-3">{String(sampleYear).slice(-2)}</span></div>
+            ))}</div> : <EmptyVisual text="No dated records match these filters." />}
+          </SnapshotPanel>
+
+          <SnapshotPanel title="Who reported these records?" subtitle="Top providers in the displayed visual scope">
+            {providers.length ? <div className="space-y-3">{providers.map(([provider, count]) => <HorizontalCountBar key={provider} label={provider} count={count} maximum={providerMaximum} />)}</div> : <EmptyVisual text="No provider information is available for this scope." />}
+            <p className="mt-4 text-[10px] leading-relaxed text-ink-3">Provider mix matters because programs can use different sampling designs, laboratory methods, and reporting limits.</p>
+          </SnapshotPanel>
+        </div>
+
+        <section className="mt-4 border border-hairline bg-surface p-4">
+          <h3 className="text-sm font-semibold text-ink">Useful next steps</h3>
+          <p className="mt-1 text-xs leading-relaxed text-ink-3">Use WQP for nearby environmental samples and UCMR for public drinking-water-system records. Neither source identifies an individual household&apos;s current tap-water result.</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" onClick={() => onViewChange("map")} className="inline-flex h-9 items-center gap-2 rounded-sm bg-[#006a70] px-3 text-xs font-semibold text-white"><MapIcon size={14} /> Open measurement map</button>
+            <button type="button" onClick={() => onViewChange("ucmr")} className="inline-flex h-9 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 text-xs font-semibold text-ink"><FlaskConical size={14} /> Check UCMR systems</button>
+            <a href="https://mywaterway.epa.gov/" target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 text-xs font-semibold text-ink">EPA How&apos;s My Waterway <ExternalLink size={13} /></a>
+            <a href="https://www.usgs.gov/programs/environmental-health-program/science/pfas-us-tapwater-interactive-dashboard" target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-sm border border-hairline bg-surface px-3 text-xs font-semibold text-ink">USGS tap-water dashboard <ExternalLink size={13} /></a>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function SnapshotMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return <div className="min-w-0 border-b border-r border-hairline p-3 last:border-r-0 sm:border-b-0"><p className="text-[9px] font-semibold uppercase text-ink-3">{label}</p><p className="mt-1 truncate text-lg font-semibold tabular text-ink" title={value}>{value}</p><p className="mt-0.5 truncate text-[10px] text-ink-3">{detail}</p></div>;
+}
+
+function SnapshotPanel({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
+  return <section className="border border-hairline bg-surface p-4"><h3 className="text-sm font-semibold text-ink">{title}</h3><p className="mt-0.5 text-[10px] leading-relaxed text-ink-3">{subtitle}</p><div className="mt-4">{children}</div></section>;
+}
+
+function HorizontalCountBar({ label, count, maximum }: { label: string; count: number; maximum: number }) {
+  return <div><div className="mb-1 flex items-center justify-between gap-3 text-[10px]"><span className="truncate text-ink-2" title={label}>{label}</span><span className="tabular font-semibold text-ink">{count.toLocaleString()}</span></div><div className="h-2 overflow-hidden rounded-sm bg-surface-2"><div className="h-full rounded-sm bg-[#5c8db7]" style={{ width: `${count === 0 ? 0 : Math.max(2, (count / maximum) * 100)}%` }} /></div></div>;
+}
+
+function EmptyVisual({ text }: { text: string }) {
+  return <div className="grid min-h-28 place-items-center rounded-sm border border-dashed border-baseline px-4 text-center text-xs text-ink-3">{text}</div>;
 }
 
 function WaterMap({ samples, state, selected, onSelect, loading, searchPlace, radiusKm, nearestSampleKm, onExpandToNearest }: { samples: WqpPfasSample[]; state: "all" | PfasState; selected: WqpPfasSample | null; onSelect: (sample: WqpPfasSample) => void; loading: boolean; searchPlace: PickedPlace | null; radiusKm: number; nearestSampleKm: number | null; onExpandToNearest: () => void }) {
