@@ -151,7 +151,7 @@ export default function PfasWaterAtlas() {
     [snapshot]
   );
 
-  const filtered = useMemo(() => {
+  const candidateSamples = useMemo(() => {
     const query = search.trim().toLowerCase();
     return (snapshot?.wqpSamples ?? []).filter((sample) => {
       if (state !== "all" && sample.state !== state) return false;
@@ -160,13 +160,29 @@ export default function PfasWaterAtlas() {
       if (detection === "non-detect" && sample.detected) return false;
       if (year !== "all" && sample.year !== Number(year)) return false;
       if (query && !`${sample.locationName} ${sample.provider} ${sample.monitoringLocationId}`.toLowerCase().includes(query)) return false;
-      if (
-        searchPlace &&
-        distanceKm(searchPlace.lat, searchPlace.lng, sample.lat, sample.lng) > radiusKm
-      ) return false;
       return true;
     });
-  }, [snapshot, state, compound, detection, year, search, searchPlace, radiusKm]);
+  }, [snapshot, state, compound, detection, year, search]);
+
+  const filtered = useMemo(
+    () =>
+      searchPlace
+        ? candidateSamples.filter(
+            (sample) =>
+              distanceKm(searchPlace.lat, searchPlace.lng, sample.lat, sample.lng) <= radiusKm
+          )
+        : candidateSamples,
+    [candidateSamples, searchPlace, radiusKm]
+  );
+
+  const nearestSampleKm = useMemo(() => {
+    if (!searchPlace || candidateSamples.length === 0) return null;
+    return Math.min(
+      ...candidateSamples.map((sample) =>
+        distanceKm(searchPlace.lat, searchPlace.lng, sample.lat, sample.lng)
+      )
+    );
+  }, [candidateSamples, searchPlace]);
 
   const ucmrFiltered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -182,6 +198,13 @@ export default function PfasWaterAtlas() {
   const detectedCount = filtered.filter((sample) => sample.detected).length;
   const nonDetectCount = filtered.length - detectedCount;
   const locations = new Set(filtered.map((sample) => sample.monitoringLocationId || `${sample.lat},${sample.lng}`)).size;
+  const ucmrDetectionCount = ucmrFiltered.reduce((sum, row) => sum + row.detectionCount, 0);
+  const ucmrNonDetectCount = ucmrFiltered.reduce(
+    (sum, row) => sum + Math.max(0, row.sampleCount - row.detectionCount),
+    0
+  );
+  const ucmrSystemCount = new Set(ucmrFiltered.map((row) => row.pwsid)).size;
+  const showingUcmr = view === "ucmr";
 
   const exportUrl = useMemo(() => {
     const params = new URLSearchParams({ state, compound, detection, year });
@@ -215,9 +238,11 @@ export default function PfasWaterAtlas() {
             </div>
             <p className="mt-0.5 text-xs text-ink-3">Five-state measurement explorer · DE, MD, NJ, NY, PA</p>
           </div>
-          <a href={exportUrl} download className={`inline-flex h-9 w-fit items-center gap-2 rounded-sm border border-hairline bg-surface px-3 text-xs font-medium text-ink shadow-sm ${!filtered.length ? "pointer-events-none opacity-40" : ""}`}>
-            <Download size={15} /> Download filtered CSV
-          </a>
+          {!showingUcmr && view !== "methods" && (
+            <a href={exportUrl} download className={`inline-flex h-9 w-fit items-center gap-2 rounded-sm border border-hairline bg-surface px-3 text-xs font-medium text-ink shadow-sm ${!filtered.length ? "pointer-events-none opacity-40" : ""}`}>
+              <Download size={15} /> Download WQP CSV
+            </a>
+          )}
         </div>
         <div className="mx-auto flex max-w-[1600px] gap-6 overflow-x-auto" role="tablist" aria-label="Water data views">
           {([
@@ -235,10 +260,10 @@ export default function PfasWaterAtlas() {
       </div>
 
       <div className="mx-auto grid w-full max-w-[1600px] grid-cols-2 border-b border-hairline bg-surface md:grid-cols-4" aria-live="polite">
-        <MiniStat label="Displayed records" value={loading ? "—" : filtered.length.toLocaleString()} detail={searchPlace ? `within ${radiusKm < 1 ? `${radiusKm * 1000} m` : `${radiusKm} km`}` : `${locations.toLocaleString()} reported locations`} />
-        <MiniStat label="Reported detections" value={loading ? "—" : detectedCount.toLocaleString()} detail="sample results, not exposure" />
-        <MiniStat label="Reported non-detects" value={loading ? "—" : nonDetectCount.toLocaleString()} detail="threshold varies by test" />
-        <MiniStat label="UCMR systems" value={loading ? "—" : new Set(ucmrFiltered.map((row) => row.pwsid)).size.toLocaleString()} detail="PFOA / PFOS system records" />
+        <MiniStat label={showingUcmr ? "UCMR summaries" : "Nearby WQP records"} value={loading ? "—" : (showingUcmr ? ucmrFiltered.length : filtered.length).toLocaleString()} detail={showingUcmr ? "system / compound rows" : searchPlace ? `within ${radiusKm < 1 ? `${radiusKm * 1000} m` : `${radiusKm} km`}` : `${locations.toLocaleString()} reported locations`} />
+        <MiniStat label="Reported detections" value={loading ? "—" : (showingUcmr ? ucmrDetectionCount : detectedCount).toLocaleString()} detail="sample results, not exposure" />
+        <MiniStat label="Reported non-detects" value={loading ? "—" : (showingUcmr ? ucmrNonDetectCount : nonDetectCount).toLocaleString()} detail="threshold varies by test" />
+        <MiniStat label="UCMR systems" value={loading ? "—" : ucmrSystemCount.toLocaleString()} detail={showingUcmr ? "address radius not applied" : "separate system records"} />
       </div>
 
       <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col lg:min-h-[680px] lg:flex-row">
@@ -267,7 +292,11 @@ export default function PfasWaterAtlas() {
                   }))}
                 />
                 <p className="mt-2 text-[11px] leading-snug text-ink-3">
-                  {filtered.length.toLocaleString()} matching sample records are inside this radius. Your address is geocoded for this search and is not added to the dataset.
+                  {filtered.length > 0 ? (
+                    <>{filtered.length.toLocaleString()} matching WQP sample records are inside this radius.</>
+                  ) : (
+                    <>No matching WQP sample records are inside this radius. This is a sampling-data gap, not a zero result or a safety finding.{nearestSampleKm != null && ` The nearest matching record is about ${nearestSampleKm.toFixed(1)} km away.`}</>
+                  )}{" "}Your address is geocoded for this search and is not added to the dataset.
                 </p>
               </div>
             ) : (
@@ -303,13 +332,13 @@ export default function PfasWaterAtlas() {
           {error ? (
             <div className="grid h-full min-h-[520px] place-items-center p-6"><div className="max-w-sm text-center"><p className="font-medium">Water data did not load</p><p className="mt-1 text-xs text-ink-3">{error}</p><button onClick={load} className="mt-4 inline-flex items-center gap-2 rounded-sm bg-ink px-3 py-2 text-xs font-medium text-white"><RefreshCw size={14} /> Try again</button></div></div>
           ) : view === "map" ? (
-            <WaterMap samples={filtered} state={state} selected={selected} onSelect={setSelected} loading={loading} searchPlace={searchPlace} radiusKm={radiusKm} />
+            <WaterMap samples={filtered} state={state} selected={selected} onSelect={setSelected} loading={loading} searchPlace={searchPlace} radiusKm={radiusKm} nearestSampleKm={nearestSampleKm} />
           ) : view === "timeline" ? (
             <SamplingHistory samples={filtered} place={searchPlace} radiusKm={radiusKm} />
           ) : view === "samples" ? (
             <SampleTable samples={filtered} page={tablePage} setPage={setTablePage} onSelect={(sample) => { setSelected(sample); setView("map"); }} />
           ) : view === "ucmr" ? (
-            <UcmrView snapshot={snapshot} systems={ucmrFiltered} state={state} page={tablePage} setPage={setTablePage} />
+            <UcmrView snapshot={snapshot} systems={ucmrFiltered} state={state} page={tablePage} setPage={setTablePage} searchPlace={searchPlace} radiusKm={radiusKm} />
           ) : (
             <MethodsView generatedAt={snapshot?.generatedAt} />
           )}
@@ -325,7 +354,7 @@ function FilterSelect({ label, value, onChange, options }: { label: string; valu
   return <label className="mt-3 block text-[11px] font-medium text-ink-2">{label}<select value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-9 w-full rounded-sm border border-hairline bg-surface px-2 text-xs text-ink">{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
 }
 
-function WaterMap({ samples, state, selected, onSelect, loading, searchPlace, radiusKm }: { samples: WqpPfasSample[]; state: "all" | PfasState; selected: WqpPfasSample | null; onSelect: (sample: WqpPfasSample) => void; loading: boolean; searchPlace: PickedPlace | null; radiusKm: number }) {
+function WaterMap({ samples, state, selected, onSelect, loading, searchPlace, radiusKm, nearestSampleKm }: { samples: WqpPfasSample[]; state: "all" | PfasState; selected: WqpPfasSample | null; onSelect: (sample: WqpPfasSample) => void; loading: boolean; searchPlace: PickedPlace | null; radiusKm: number; nearestSampleKm: number | null }) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const sampleRef = useRef(new Map<string, WqpPfasSample>());
@@ -418,7 +447,7 @@ function WaterMap({ samples, state, selected, onSelect, loading, searchPlace, ra
     else map.fitBounds(STATE_BOUNDS[state], { padding: 32, duration: 700 });
   }, [state, ready, searchPlace]);
 
-  return <div className="relative h-[560px] lg:h-full lg:min-h-[680px]"><div className="absolute inset-0"><div ref={container} className="h-full w-full" /></div>{(loading || !ready) && <div className="absolute inset-0 grid place-items-center bg-surface/75 backdrop-blur-sm"><div className="flex items-center gap-2 text-xs font-medium text-ink-2"><RefreshCw size={15} className="animate-spin" /> Loading official sample records</div></div>}<div className="pointer-events-none absolute bottom-8 left-3 rounded-sm border border-hairline bg-surface/95 px-2.5 py-2 text-[10px] text-ink-2 shadow-md"><strong className="block text-ink">WQP reported coordinates</strong>Point is a monitoring location, not a home.</div></div>;
+  return <div className="relative h-[560px] lg:h-full lg:min-h-[680px]"><div className="absolute inset-0"><div ref={container} className="h-full w-full" /></div>{(loading || !ready) && <div className="absolute inset-0 grid place-items-center bg-surface/75 backdrop-blur-sm"><div className="flex items-center gap-2 text-xs font-medium text-ink-2"><RefreshCw size={15} className="animate-spin" /> Loading official sample records</div></div>}{searchPlace && samples.length === 0 && !loading && ready && <div className="absolute left-1/2 top-3 z-10 w-[min(92%,440px)] -translate-x-1/2 rounded-md border border-hairline bg-surface/95 p-3 shadow-lg backdrop-blur"><p className="text-xs font-semibold text-ink">No WQP sample records in this radius</p><p className="mt-1 text-[11px] leading-relaxed text-ink-3">This indicates missing nearby records in this dataset, not zero PFAS or safe water.{nearestSampleKm != null && ` The nearest matching WQP record is about ${nearestSampleKm.toFixed(1)} km away.`}</p></div>}<div className="pointer-events-none absolute bottom-8 left-3 rounded-sm border border-hairline bg-surface/95 px-2.5 py-2 text-[10px] text-ink-2 shadow-md"><strong className="block text-ink">WQP reported coordinates</strong>Point is a monitoring location, not a home.</div></div>;
 }
 
 function SamplingHistory({ samples, place, radiusKm }: { samples: WqpPfasSample[]; place: PickedPlace | null; radiusKm: number }) {
@@ -455,7 +484,7 @@ function SamplingHistory({ samples, place, radiusKm }: { samples: WqpPfasSample[
         )}
         {rows.length === 0 ? (
           <div className="mt-12 rounded-md border border-dashed border-baseline p-8 text-center text-sm text-ink-3">
-            No dated samples match these filters. Expand the radius or reset a filter.
+            No dated WQP samples match these filters. This is a data-coverage gap, not evidence of zero PFAS. Clear the address or reset a filter to inspect the broader dataset.
           </div>
         ) : (
           <div className="mt-5 overflow-hidden rounded-md border border-hairline">
@@ -502,11 +531,11 @@ function SampleTable({ samples, page, setPage, onSelect }: { samples: WqpPfasSam
   return <DataTableShell title="Water Quality Portal records" detail={`${samples.length.toLocaleString()} validated display records`} page={page} pages={pages} setPage={setPage}><table className="w-full min-w-[860px] text-left text-xs"><thead className="sticky top-0 bg-surface-2 text-[10px] uppercase text-ink-3"><tr>{["Result", "Compound", "State", "Sample date", "Location", "Medium", "Provider", ""].map((header) => <th key={header} className="px-3 py-2.5 font-semibold">{header}</th>)}</tr></thead><tbody>{rows.map((sample) => <tr key={sample.id} className="border-t border-hairline bg-surface hover:bg-[#f2f8f7]"><td className="px-3 py-2.5 font-medium tabular">{formatResult(sample)}</td><td className="px-3 py-2.5">{sample.compound}</td><td className="px-3 py-2.5">{sample.state}</td><td className="px-3 py-2.5 tabular">{sample.date}</td><td className="max-w-52 truncate px-3 py-2.5" title={sample.locationName}>{sample.locationName}</td><td className="max-w-40 truncate px-3 py-2.5" title={sample.medium}>{sample.medium}</td><td className="max-w-52 truncate px-3 py-2.5" title={sample.provider}>{sample.provider}</td><td className="px-3 py-2.5"><button onClick={() => onSelect(sample)} title="Show on map" className="grid h-7 w-7 place-items-center rounded-sm border border-hairline"><ChevronRight size={14} /></button></td></tr>)}</tbody></table></DataTableShell>;
 }
 
-function UcmrView({ snapshot, systems, state, page, setPage }: { snapshot: PfasPilotSnapshot | null; systems: UcmrPfasSystem[]; state: "all" | PfasState; page: number; setPage: (page: number) => void }) {
+function UcmrView({ snapshot, systems, state, page, setPage, searchPlace, radiusKm }: { snapshot: PfasPilotSnapshot | null; systems: UcmrPfasSystem[]; state: "all" | PfasState; page: number; setPage: (page: number) => void; searchPlace: PickedPlace | null; radiusKm: number }) {
   const pageSize = 30;
   const rows = systems.slice(page * pageSize, (page + 1) * pageSize);
   const pages = Math.max(1, Math.ceil(systems.length / pageSize));
-  return <div className="h-full overflow-auto p-4"><div className="grid gap-3 sm:grid-cols-5">{snapshot?.ucmrStateSummary.filter((summary) => state === "all" || summary.state === state).map((summary) => <div key={summary.state} className="panel rounded-sm p-3"><div className="flex items-center justify-between"><span className="text-sm font-semibold">{summary.state}</span><CheckCircle2 size={14} className="text-[#007f86]" /></div><p className="mt-3 text-xl font-semibold tabular">{summary.systems.toLocaleString()}</p><p className="text-[10px] text-ink-3">public water systems</p><p className="mt-2 text-xs tabular text-ink-2">{summary.detections.toLocaleString()} detections / {summary.samples.toLocaleString()} results</p></div>)}</div><div className="mt-4 rounded-sm border border-[#d8d5c6] bg-[#fffdf3] p-3 text-xs leading-relaxed text-[#5d5638]"><strong>Location discipline:</strong> UCMR 5 records identify public water systems and sampling points but the public occurrence file does not supply defensible exact map coordinates. These results stay in a system table instead of being pinned to homes or arbitrary centroids.</div><div className="mt-4"><DataTableShell title="EPA UCMR 5 drinking-water system records" detail={`${systems.length.toLocaleString()} system / compound summaries`} page={page} pages={pages} setPage={setPage}><table className="w-full min-w-[840px] text-left text-xs"><thead className="bg-surface-2 text-[10px] uppercase text-ink-3"><tr>{["System", "State", "ZIP context", "PFAS", "Reported detections", "Highest reported", "Latest sample", "Source"].map((header) => <th key={header} className="px-3 py-2.5 font-semibold">{header}</th>)}</tr></thead><tbody>{rows.map((system) => <tr key={system.id} className="border-t border-hairline bg-surface"><td className="px-3 py-2.5"><p className="font-medium">{system.pwsName}</p><p className="text-[10px] text-ink-3">PWSID {system.pwsid}</p></td><td className="px-3 py-2.5">{system.state}</td><td className="px-3 py-2.5">{system.zip || "—"}</td><td className="px-3 py-2.5 font-medium">{system.compound}</td><td className="px-3 py-2.5 tabular">{system.detectionCount} / {system.sampleCount}</td><td className="px-3 py-2.5 tabular">{system.maxNgL == null ? `None ≥ ${system.mrlNgL ?? "reported"} ng/L` : `${system.maxNgL.toLocaleString()} ng/L`}</td><td className="px-3 py-2.5 tabular">{system.latestDate}</td><td className="px-3 py-2.5"><a href={system.sourceUrl} target="_blank" rel="noreferrer" className="text-[#006a70]">EPA <ExternalLink size={11} className="inline" /></a></td></tr>)}</tbody></table></DataTableShell></div></div>;
+  return <div className="h-full overflow-auto p-4">{searchPlace && <div className="mb-4 rounded-md border border-accent/25 bg-accent-soft p-3 text-xs leading-relaxed text-ink-2"><strong className="text-ink">Address radius not applied to UCMR.</strong>{" "}UCMR records do not include defensible exact sampling coordinates, so the {radiusKm < 1 ? `${radiusKm * 1000} m` : `${radiusKm} km`} search around {searchPlace.label} filters WQP samples only. Search this table by water-system name, PWSID, or ZIP instead.</div>}<div className="grid gap-3 sm:grid-cols-5">{snapshot?.ucmrStateSummary.filter((summary) => state === "all" || summary.state === state).map((summary) => <div key={summary.state} className="panel rounded-sm p-3"><div className="flex items-center justify-between"><span className="text-sm font-semibold">{summary.state}</span><CheckCircle2 size={14} className="text-[#007f86]" /></div><p className="mt-3 text-xl font-semibold tabular">{summary.systems.toLocaleString()}</p><p className="text-[10px] text-ink-3">public water systems</p><p className="mt-2 text-xs tabular text-ink-2">{summary.detections.toLocaleString()} detections / {summary.samples.toLocaleString()} results</p></div>)}</div><div className="mt-4 rounded-sm border border-[#d8d5c6] bg-[#fffdf3] p-3 text-xs leading-relaxed text-[#5d5638]"><strong>Location discipline:</strong> UCMR 5 records identify public water systems and sampling points but the public occurrence file does not supply defensible exact map coordinates. These results stay in a system table instead of being pinned to homes or arbitrary centroids.</div><div className="mt-4"><DataTableShell title={`EPA UCMR 5 drinking-water system records${searchPlace ? " (not radius-filtered)" : ""}`} detail={`${systems.length.toLocaleString()} system / compound summaries`} page={page} pages={pages} setPage={setPage}><table className="w-full min-w-[840px] text-left text-xs"><thead className="bg-surface-2 text-[10px] uppercase text-ink-3"><tr>{["System", "State", "ZIP context", "PFAS", "Reported detections", "Highest reported", "Latest sample", "Source"].map((header) => <th key={header} className="px-3 py-2.5 font-semibold">{header}</th>)}</tr></thead><tbody>{rows.map((system) => <tr key={system.id} className="border-t border-hairline bg-surface"><td className="px-3 py-2.5"><p className="font-medium">{system.pwsName}</p><p className="text-[10px] text-ink-3">PWSID {system.pwsid}</p></td><td className="px-3 py-2.5">{system.state}</td><td className="px-3 py-2.5">{system.zip || "—"}</td><td className="px-3 py-2.5 font-medium">{system.compound}</td><td className="px-3 py-2.5 tabular">{system.detectionCount} / {system.sampleCount}</td><td className="px-3 py-2.5 tabular">{system.maxNgL == null ? `None ≥ ${system.mrlNgL ?? "reported"} ng/L` : `${system.maxNgL.toLocaleString()} ng/L`}</td><td className="px-3 py-2.5 tabular">{system.latestDate}</td><td className="px-3 py-2.5"><a href={system.sourceUrl} target="_blank" rel="noreferrer" className="text-[#006a70]">EPA <ExternalLink size={11} className="inline" /></a></td></tr>)}</tbody></table></DataTableShell></div></div>;
 }
 
 function DataTableShell({ title, detail, page, pages, setPage, children }: { title: string; detail: string; page: number; pages: number; setPage: (page: number) => void; children: React.ReactNode }) {
