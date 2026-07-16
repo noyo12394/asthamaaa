@@ -1,11 +1,5 @@
-import SiteHeader from "@/components/SiteHeader";
-import AtlasApp from "@/components/atlas/AtlasApp";
+import EarthPulseApp from "@/components/earthpulse/EarthPulseApp";
 
-export default function CommandMapPage() {
-  return (
-    <div className="flex h-dvh flex-col">
-      <SiteHeader />
-      <AtlasApp />
-    </div>
-  );
+export default function EarthPulsePage() {
+  return <EarthPulseApp />;
 }
