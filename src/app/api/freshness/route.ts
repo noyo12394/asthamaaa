@@ -17,7 +17,8 @@ export async function GET() {
         { name: "County vulnerability indicators", source: VULNERABILITY_SOURCE },
       ],
       environment: {
-        airnowConfigured: Boolean(process.env.AIRNOW_API_KEY),
+        airnowConfigured: true,
+        airnowApiKeyConfigured: Boolean(process.env.AIRNOW_API_KEY),
         openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
         databaseConfigured: Boolean(process.env.DATABASE_URL),
       },

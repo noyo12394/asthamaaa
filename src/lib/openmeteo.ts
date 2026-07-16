@@ -1,12 +1,13 @@
 /**
- * Open-Meteo Air Quality client (live modeled data; CAMS-based, no API key)
- * with a deterministic, clearly-labeled fallback field for environments where
- * the API is unreachable. Every result carries a SourceRef; fallback values
- * are never presented as live.
+ * Current air-quality assembly: modeled CAMS concentrations from Open-Meteo,
+ * overlaid with official EPA AirNow AQI when a nearby reporting area is
+ * available. A deterministic, clearly labeled fallback field keeps the map
+ * usable when the model API is unreachable.
  */
 import { cached, TTL } from "./cache";
 import { trackedFetchJson } from "./freshness";
 import { computeAqi, categoryForAqi } from "./aqi";
+import { getOfficialCurrentAqi } from "./airnow";
 import type { AirQualitySnapshot, HourlyPoint, SourceRef, Sourced } from "./types";
 
 const BASE = "https://air-quality-api.open-meteo.com/v1/air-quality";
@@ -144,6 +145,7 @@ export async function getCurrentAirQuality(
 ): Promise<{ snapshot: AirQualitySnapshot; cachedHit: boolean }> {
   const key = `aq:current:${lat.toFixed(2)}:${lng.toFixed(2)}`;
   const hit = await cached(key, TTL.airQualityCurrent, async () => {
+    const officialPromise = getOfficialCurrentAqi(lat, lng);
     const url =
       `${BASE}?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}` +
       `&current=pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide,carbon_monoxide,us_aqi&timezone=UTC`;
@@ -151,32 +153,50 @@ export async function getCurrentAirQuality(
       entityType: "air-quality-current",
     });
     const now = new Date().toISOString();
+    let snapshot: AirQualitySnapshot;
     if (data?.current) {
-      return snapshotFromValues(lat, lng, data.current.time + ":00Z", data.current, sourceRef("live", now));
+      snapshot = snapshotFromValues(lat, lng, data.current.time + ":00Z", data.current, sourceRef("live", now));
+    } else {
+      const fb = fallbackField(lat, lng, new Date());
+      snapshot = snapshotFromValues(
+        lat,
+        lng,
+        now,
+        {
+          pm2_5: fb.pm25,
+          pm10: fb.pm10,
+          ozone: fb.ozone,
+          nitrogen_dioxide: fb.no2,
+          sulphur_dioxide: null,
+          carbon_monoxide: null,
+          us_aqi: null,
+        },
+        sourceRef("fallback", now)
+      );
     }
-    const fb = fallbackField(lat, lng, new Date());
-    return snapshotFromValues(
-      lat,
-      lng,
-      now,
-      {
-        pm2_5: fb.pm25,
-        pm10: fb.pm10,
-        ozone: fb.ozone,
-        nitrogen_dioxide: fb.no2,
-        sulphur_dioxide: null,
-        carbon_monoxide: null,
-        us_aqi: null,
-      },
-      sourceRef("fallback", now)
-    );
+
+    const official = await officialPromise;
+    if (!official) return snapshot;
+    return {
+      ...snapshot,
+      observedAt: official.observedAt,
+      usAqi: { value: official.aqi, unit: "US AQI", source: official.source },
+      category: categoryForAqi(official.aqi),
+      dominantPollutant: official.pollutant,
+    };
   });
   // Re-label live→cached when served from cache so the badge is honest.
   const snapshot = hit.value;
-  if (hit.cached && snapshot.usAqi.source.status === "live") {
+  if (hit.cached) {
     const relabel = (s: Sourced<number | null>): Sourced<number | null> => ({
       ...s,
-      source: { ...s.source, status: "cached", notes: `${s.source.notes ?? ""} Served from backend cache (age ${Math.round(hit.ageMs / 1000)}s).`.trim() },
+      source: ["live", "official"].includes(s.source.status)
+        ? {
+            ...s.source,
+            status: "cached",
+            notes: `${s.source.notes ?? ""} Served from backend cache (age ${Math.round(hit.ageMs / 1000)}s).`.trim(),
+          }
+        : s.source,
     });
     return {
       cachedHit: true,

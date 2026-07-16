@@ -61,6 +61,7 @@ export function invalidate(prefix: string): number {
 export const TTL = {
   geocode: 24 * 60 * 60 * 1000, // 24h — places don't move
   airQualityCurrent: 10 * 60 * 1000, // 10 min
+  airNowReportingAreas: 15 * 60 * 1000, // file product refreshes twice hourly
   airQualityHistory: 30 * 60 * 1000, // 30 min
   waterQualityCurrent: 60 * 60 * 1000, // 1h — official water sources change slowly
   waterLive: 10 * 60 * 1000, // 10 min — USGS provisional continuous observations
