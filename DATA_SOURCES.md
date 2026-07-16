@@ -18,8 +18,14 @@ confidence level. This file documents each source and how it enters the system.
 - GeoNames-backed, no key; cached 24 h. Offline fallback: built-in gazetteer of
   ~50 major US cities + all Census county names (labeled `fallback`).
 
-### AirNow API (US EPA) — `official`, optional
-- Reserved integration for official AQI observations when `AIRNOW_API_KEY` is set.
+### EPA AirNow reporting-area observations — `official`
+- https://files.airnowtech.org/airnow/today/reportingarea.dat (no key)
+- Primary current US AQI and dominant pollutant. The file refreshes twice per hour.
+- PASS selects the nearest reporting-area centroid within 125 km and uses the
+  peak current pollutant AQI for that area. When none is available, the current
+  endpoint retains the clearly sourced Open-Meteo AQI fallback.
+- AirNow observations are preliminary public-reporting data, not certified AQS
+  data used for regulatory determinations.
 
 ## Committed snapshots (`src/data/`, provenance embedded in each file)
 

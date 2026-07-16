@@ -100,3 +100,50 @@ export async function trackedFetchJson<T>(
     clearTimeout(timer);
   }
 }
+
+/** Instrumented text fetch for official pipe/CSV file products. */
+export async function trackedFetchText(
+  sourceName: string,
+  url: string,
+  opts?: { timeoutMs?: number; entityType?: string }
+): Promise<string | null> {
+  const started = Date.now();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts?.timeoutMs ?? 8000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    const ok = res.ok;
+    const body = ok ? await res.text() : null;
+    recordFetch({
+      entityType: opts?.entityType ?? "api-fetch",
+      entityId: null,
+      sourceName,
+      sourceUrl: url,
+      fetchedAt: new Date().toISOString(),
+      ok,
+      httpStatus: res.status,
+      durationMs: Date.now() - started,
+      vintage: null,
+      confidence: null,
+      notes: ok ? null : `HTTP ${res.status}`,
+    });
+    return body;
+  } catch (err) {
+    recordFetch({
+      entityType: opts?.entityType ?? "api-fetch",
+      entityId: null,
+      sourceName,
+      sourceUrl: url,
+      fetchedAt: new Date().toISOString(),
+      ok: false,
+      httpStatus: null,
+      durationMs: Date.now() - started,
+      vintage: null,
+      confidence: null,
+      notes: err instanceof Error ? err.message : "fetch failed",
+    });
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}

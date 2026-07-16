@@ -44,7 +44,7 @@ describe("API routes", () => {
     const res = await currentGet(req("/api/air-quality/current?lat=40.6&lng=-75.47"));
     const body = await res.json();
     expect(body.ok).toBe(true);
-    expect(["live", "cached", "fallback"]).toContain(body.data.usAqi.source.status);
+    expect(["live", "cached", "official", "fallback"]).toContain(body.data.usAqi.source.status);
     expect(body.data.pm25.unit).toBe("µg/m³");
   });
 

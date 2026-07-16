@@ -11,8 +11,15 @@ export const metadata: Metadata = { title: "Methods" };
 
 const SOURCES = [
   {
+    name: "EPA AirNow current observations",
+    role: "Primary current US AQI and dominant pollutant",
+    status: "official",
+    notes:
+      "Public reporting-area observations, refreshed twice per hour. PASS selects the nearest reporting-area centroid and uses the peak pollutant AQI reported for that area. AirNow data are preliminary and intended for public reporting, not regulatory determinations.",
+  },
+  {
     name: "Open-Meteo Air Quality API",
-    role: "Current & hourly PM2.5, PM10, ozone, NO2, SO2, CO, US AQI",
+    role: "Modeled concentrations, map surface, hourly history and forecast; AQI fallback",
     status: "live/modeled at runtime",
     notes:
       "CAMS model output, fetched server-side and cached 10 minutes. Model estimates, not physical monitor readings. When unreachable, a deterministic synthetic field labeled FALLBACK is used.",
@@ -40,12 +47,6 @@ const SOURCES = [
     role: "County social vulnerability (SVI-style composite + components)",
     status: VULNERABILITY_SOURCE.status,
     notes: VULNERABILITY_SOURCE.notes ?? "",
-  },
-  {
-    name: "AirNow API (US EPA)",
-    role: "Official AQI observations (optional)",
-    status: "off unless AIRNOW_API_KEY configured",
-    notes: "Architecture supports official observations alongside the model layer.",
   },
 ];
 
@@ -160,14 +161,14 @@ level:  < 25  Low        25–49  Moderate
         <h2 className="mt-8 text-base font-semibold">4. Interpretation limits</h2>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-relaxed text-ink-2">
           <li>
-            <strong>Snapshot ≠ regulatory.</strong> The displayed AQI is an hourly model snapshot.
-            It is not a 24-hour NowCast, not a design value, and cannot be compared against annual
-            NAAQS attainment.
+            <strong>Public AQI ≠ regulatory.</strong> The displayed current AQI prefers EPA AirNow
+            reporting-area observations. AirNow data are preliminary public-health information,
+            not certified AQS data or an annual design value.
           </li>
           <li>
-            <strong>Model ≠ monitor.</strong> Concentrations come from a model surface unless an
-            official observation source is configured. Monitor distance quantifies how verifiable
-            the model is locally — far from monitors, treat values as lower-confidence.
+            <strong>AQI and concentrations can have different sources.</strong> The current AQI
+            prefers AirNow, while the pollutant concentration cards and map surface remain CAMS
+            model estimates. Each value carries its own source label.
           </li>
           <li>
             <strong>County ≠ individual.</strong> Health and vulnerability indicators describe
