@@ -4,21 +4,19 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: new URL("https://asthamaaa.vercel.app"),
   title: {
-    default: "EarthPulse — The Living Impact Atlas",
-    template: "%s · EarthPulse",
+    default: "PASS Equity Atlas",
+    template: "%s · PASS Equity Atlas",
   },
   description:
-    "An explainable living atlas that shows how hazards cascade through roads, hospitals, schools, and the services communities depend on.",
-  applicationName: "EarthPulse",
-  keywords: ["hazards", "flooding", "infrastructure", "geospatial", "public data", "Lehigh Valley"],
+    "Environmental health intelligence: live air quality, EPA monitor coverage confidence, community health vulnerability, and equity-aware alert priority — with a source trail behind every number.",
+  applicationName: "PASS Equity Atlas",
+  keywords: ["air quality", "PFAS", "water quality", "environmental health", "EPA", "public health"],
   openGraph: {
     type: "website",
-    siteName: "EarthPulse",
-    title: "EarthPulse — The Living Impact Atlas",
-    description: "See the chain reaction before it reaches you.",
-    images: [{ url: "/og.png", width: 1536, height: 1024, alt: "EarthPulse living impact atlas" }],
+    siteName: "PASS Equity Atlas",
+    title: "PASS Equity Atlas",
+    description: "Source-transparent air and water monitoring intelligence for communities and researchers.",
   },
-  twitter: { card: "summary_large_image", title: "EarthPulse — The Living Impact Atlas", description: "See the chain reaction before it reaches you.", images: ["/og.png"] },
   robots: { index: true, follow: true },
 };
 
