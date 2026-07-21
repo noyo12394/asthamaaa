@@ -15,6 +15,7 @@ import {
 import { api } from "@/lib/client/api";
 
 const PRIMARY_NAV = [
+  { href: "/local-risk", label: "Local risk" },
   { href: "/", label: "Air map" },
   { href: "/water-pilot", label: "Water & PFAS" },
   { href: "/compare", label: "Compare" },
