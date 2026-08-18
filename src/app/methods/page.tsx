@@ -25,6 +25,20 @@ const SOURCES = [
       "CAMS model output, fetched server-side and cached 10 minutes. Model estimates, not physical monitor readings. When unreachable, a deterministic synthetic field labeled FALLBACK is used.",
   },
   {
+    name: "Open-Meteo Elevation and Weather APIs",
+    role: "Terrain point samples, wind speed, and planetary boundary-layer height for the Terrain & Smoke Lab",
+    status: "modeled",
+    notes:
+      "The lab samples 29 points from the 90 m elevation product and weather-model fields. Elevations are suitable for an exploratory regional contrast, not engineering or property-level decisions.",
+  },
+  {
+    name: "NOAA/NESDIS Hazard Mapping System",
+    role: "Analyst-drawn satellite smoke polygons classified light, medium, or heavy",
+    status: "official",
+    notes:
+      "HMS identifies visible smoke overhead. It does not measure ground-level smoke concentration, personal exposure, or source attribution.",
+  },
+  {
     name: COUNTY_SOURCE.name,
     role: "County identification, boundaries, centroids",
     status: COUNTY_SOURCE.status,
@@ -64,6 +78,51 @@ export default function MethodsPage() {
           <code className="bg-surface-2 px-1">src/lib/scoring.ts</code> and documented in
           SCORING.md in the repository.
         </p>
+
+        <section id="terrain-smoke" className="mt-8 scroll-mt-20 border-y border-hairline py-6">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">Research module: terrain, smoke, and PM2.5</h2>
+            <a href="/terrain-smoke" className="text-xs font-medium text-accent hover:underline">
+              Open Terrain &amp; Smoke Lab
+            </a>
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-ink-2">
+            The lab tests a narrower research question than the platform priority score: does modeled
+            PM2.5 differ between the lowest and highest terrain thirds around a selected place, and do
+            terrain variables improve a held-out short-window prediction after weather, time of day,
+            and satellite smoke context are already included?
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <h3 className="text-sm font-semibold">Orographic Exposure Differential (OED)</h3>
+              <pre className="mt-2 overflow-x-auto bg-surface-2 p-3 text-xs">OED = median(PM2.5 lowland) - median(PM2.5 highland)</pre>
+              <p className="mt-2 text-xs leading-relaxed text-ink-2">
+                Twenty-nine grid cells are ranked by elevation within the selected radius and divided
+                into local thirds. Positive OED means the CAMS model currently places more PM2.5 in
+                lowland cells. It is a descriptive model contrast, not the causal effect of elevation.
+                The interface also reports Spearman correlation and the percentage of hourly OED
+                values above zero.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">Interpretable model ablation</h3>
+              <p className="mt-2 text-xs leading-relaxed text-ink-2">
+                A baseline random forest uses wind speed, boundary-layer height, NOAA smoke density
+                and availability, and cyclic hour features. A second forest adds elevation,
+                topographic position, and ruggedness. Training rows are sampled every six hours and
+                the final 24 UTC hours are held out in full. Terrain lift is the percentage reduction
+                in held-out RMSE. Negative and null lift remain visible.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 border-l-2 border-warning bg-surface-2 px-3 py-2 text-xs leading-relaxed text-ink-2">
+            <strong>Validation boundary.</strong> The target is CAMS modeled PM2.5, not monitor truth;
+            NOAA HMS describes visible overhead smoke, not breathing-level concentration. The rolling
+            analysis is an exploratory diagnostic. Scientific release requires monitor-based testing
+            with spatial and temporal blocking, comparison against simpler regression baselines, and
+            sensitivity tests for radius, grid resolution, and terrain thresholds.
+          </div>
+        </section>
 
         <h2 className="mt-8 text-base font-semibold">1. Component scores (each 0–100)</h2>
         <div className="panel mt-3 overflow-x-auto">

@@ -14,6 +14,29 @@ confidence level. This file documents each source and how it enters the system.
   monitor distance so the verification gap is explicit.
 - Unreachable ⇒ deterministic synthetic field, labeled `fallback`, confidence low.
 
+### Open-Meteo Elevation and Weather APIs — `modeled`
+- https://open-meteo.com/en/docs/elevation-api and https://open-meteo.com/en/docs
+- The Terrain & Smoke Lab samples 29 points from the 90 m elevation product and
+  pairs them with modeled wind speed and planetary boundary-layer height.
+- Point elevations are regional analysis inputs, not surveyed elevations. Weather
+  fields may have a coarser native grid; duplicate provider cells are removed before
+  model fitting.
+
+### NOAA/NESDIS Hazard Mapping System smoke polygons — `official`
+- https://www.ospo.noaa.gov/products/land/hms.html
+- Daily analyst-drawn satellite smoke polygons classified light, medium, or heavy.
+- The latest completed-day KML is fetched from the NOAA archive and cached for the
+  Terrain & Smoke Lab. HMS indicates visible smoke overhead; it does not measure
+  surface concentration, exposure, or health effect.
+
+### Terrain-aware random-forest ablation — `estimated`
+- Implemented in `src/lib/terrain-smoke.ts` with `ml-random-forest`.
+- Baseline predictors: wind, boundary-layer height, NOAA smoke density/availability,
+  and cyclic hour. Terrain model adds elevation, topographic position, and ruggedness.
+- The final 24 UTC hours are held out. The displayed "terrain lift" is the percent
+  reduction in RMSE; negative and null results are shown. The target is CAMS modeled
+  PM2.5, so the result is exploratory until monitor-based spatial/temporal validation.
+
 ### Open-Meteo Geocoding API — `live`
 - GeoNames-backed, no key; cached 24 h. Offline fallback: built-in gazetteer of
   ~50 major US cities + all Census county names (labeled `fallback`).

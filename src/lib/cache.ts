@@ -66,4 +66,5 @@ export const TTL = {
   waterQualityCurrent: 60 * 60 * 1000, // 1h — official water sources change slowly
   waterLive: 10 * 60 * 1000, // 10 min — USGS provisional continuous observations
   mapCells: 10 * 60 * 1000, // 10 min
+  terrainSmoke: 30 * 60 * 1000, // 30 min — multi-source terrain/smoke model run
 } as const;
