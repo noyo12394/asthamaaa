@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { terrainSmokeQuerySchema } from "@/app/api/terrain-smoke/route";
 import {
   orographicExposureDifferential,
   parseHmsSmokeKml,
@@ -8,6 +9,19 @@ import {
 } from "@/lib/terrain-smoke";
 
 describe("terrain and smoke research helpers", () => {
+  it("accepts global study coordinates while protecting map projection limits", () => {
+    expect(
+      terrainSmokeQuerySchema.safeParse({
+        lat: -28.2308,
+        lng: 28.3071,
+        radiusKm: 20,
+        pastDays: 3,
+      }).success
+    ).toBe(true);
+    expect(terrainSmokeQuerySchema.safeParse({ lat: -90, lng: 28.3071 }).success).toBe(false);
+    expect(terrainSmokeQuerySchema.safeParse({ lat: 40, lng: 181 }).success).toBe(false);
+  });
+
   it("computes Spearman correlation with tied ranks", () => {
     expect(spearmanCorrelation([100, 200, 300, 400], [1, 2, 3, 4])).toBeCloseTo(1);
     expect(spearmanCorrelation([100, 200, 300, 400], [4, 3, 2, 1])).toBeCloseTo(-1);

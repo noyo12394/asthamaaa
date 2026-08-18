@@ -5,16 +5,16 @@ import { getTerrainSmokeAnalysis } from "@/lib/terrain-smoke";
 
 export const maxDuration = 30;
 
-const schema = z.object({
-  lat: z.coerce.number().min(24).max(50),
-  lng: z.coerce.number().min(-126).max(-66),
+export const terrainSmokeQuerySchema = z.object({
+  lat: z.coerce.number().min(-85).max(85),
+  lng: z.coerce.number().min(-180).max(180),
   radiusKm: z.coerce.number().min(15).max(75).default(40),
   pastDays: z.coerce.number().int().min(3).max(7).default(7),
 });
 
 export async function GET(req: NextRequest) {
   try {
-    const query = parseQuery(req, schema);
+    const query = parseQuery(req, terrainSmokeQuerySchema);
     if (query instanceof NextResponse) return query;
     const analysis = await getTerrainSmokeAnalysis(
       query.lat,

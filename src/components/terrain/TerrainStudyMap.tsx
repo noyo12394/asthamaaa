@@ -245,7 +245,14 @@ export default function TerrainStudyMap({ analysis, visible }: Props) {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready || !analysis) return;
+    if (!map || !ready) return;
+    if (!analysis) {
+      popupRef.current?.remove();
+      (map.getSource("terrain-cells") as maplibregl.GeoJSONSource)?.setData(EMPTY);
+      (map.getSource("terrain-points") as maplibregl.GeoJSONSource)?.setData(EMPTY);
+      (map.getSource("smoke-plumes") as maplibregl.GeoJSONSource)?.setData(EMPTY);
+      return;
+    }
     (map.getSource("terrain-cells") as maplibregl.GeoJSONSource)?.setData(cellsGeoJson(analysis));
     (map.getSource("terrain-points") as maplibregl.GeoJSONSource)?.setData(pointsGeoJson(analysis));
     (map.getSource("smoke-plumes") as maplibregl.GeoJSONSource)?.setData(smokeGeoJson(analysis));
