@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   description:
     "Environmental health intelligence: live air quality, EPA monitor coverage confidence, community health vulnerability, and equity-aware alert priority — with a source trail behind every number.",
   applicationName: "PASS Equity Atlas",
-  keywords: ["air quality", "PFAS", "water quality", "environmental health", "EPA", "public health"],
+  keywords: ["air quality", "wildfire smoke", "terrain", "PM2.5", "PFAS", "water quality", "environmental health", "EPA", "public health"],
   openGraph: {
     type: "website",
     siteName: "PASS Equity Atlas",

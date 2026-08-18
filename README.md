@@ -10,6 +10,13 @@ Live: https://asthamaaa.vercel.app
 
 ## What it does
 
+- **Terrain & Smoke Lab** (research module) — a real 3D DEM surface, local
+  lowland/transition/highland cells, CAMS PM2.5, and NOAA analyst-drawn smoke
+  polygons. It introduces the **Orographic Exposure Differential** (lowland minus
+  highland median PM2.5), an elevation-PM2.5 correlation view, and an interpretable
+  random-forest ablation that tests whether elevation, topographic position, and
+  ruggedness improve a fully held-out final day beyond weather, time, and smoke.
+  Negative model lift is retained and explained, not hidden.
 - **Command Map** — full-screen 3D MapLibre command center. Layers: current-AQI hex
   surface, animated PM2.5 plume, monitor pins/towers, monitor-confidence coverage rings,
   county health-vulnerability extrusions, equity-burden choropleth, alert-priority
