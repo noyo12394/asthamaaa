@@ -131,6 +131,18 @@ export default function TerrainSmokeLab() {
     }
   }
 
+  function selectRadius(nextRadius: number) {
+    if (nextRadius === radiusKm) return;
+    setRadiusKm(nextRadius);
+    void run(place, nextRadius, pastDays);
+  }
+
+  function selectEvidenceWindow(nextDays: number) {
+    if (nextDays === pastDays) return;
+    setPastDays(nextDays);
+    void run(place, radiusKm, nextDays);
+  }
+
   useEffect(() => {
     const id = ++requestId.current;
     api<TerrainSmokeAnalysis>(
@@ -162,7 +174,7 @@ export default function TerrainSmokeLab() {
             <p className="mt-0.5 max-w-3xl text-xs text-ink-2">Test whether modeled PM2.5 differs between local lowlands and highlands, then measure whether terrain improves a held-out prediction.</p>
           </div>
           <div className="flex items-center gap-2 text-[10px] text-ink-3">
-            <span className="inline-flex items-center gap-1"><Activity size={12} className={loading ? "animate-pulse text-warning" : "text-good"} />{loading ? "Analyzing sources" : updated ? `Updated ${updated}` : "Ready"}</span>
+            <span className="inline-flex items-center gap-1"><Activity size={12} className={loading ? "animate-pulse text-warning" : "text-good"} />{loading ? "Analyzing sources" : updated ? `Updated ${updated} · ${analysis?.pastDays}-day window` : "Ready"}</span>
             <span>Exploratory · not personal exposure</span>
           </div>
         </div>
@@ -181,7 +193,7 @@ export default function TerrainSmokeLab() {
             <legend className="panel-title">Analysis radius</legend>
             <div className="mt-2 grid grid-cols-3 rounded-sm border border-hairline bg-surface-2 p-0.5">
               {[20, 40, 60].map((value) => (
-                <button key={value} type="button" onClick={() => setRadiusKm(value)} className={`h-8 rounded-sm text-xs font-medium ${radiusKm === value ? "bg-surface text-accent shadow-sm" : "text-ink-2"}`}>{Math.round(convertKm(value, unit))}</button>
+                <button key={value} type="button" onClick={() => selectRadius(value)} className={`h-8 rounded-sm text-xs font-medium ${radiusKm === value ? "bg-surface text-accent shadow-sm" : "text-ink-2"}`}>{Math.round(convertKm(value, unit))}</button>
               ))}
             </div>
             <div className="mt-1 flex justify-between text-[10px] text-ink-3"><span>Local</span><span>{radiusLabel}</span><span>Regional</span></div>
@@ -191,7 +203,7 @@ export default function TerrainSmokeLab() {
             <legend className="panel-title">Evidence window</legend>
             <div className="mt-2 grid grid-cols-3 rounded-sm border border-hairline bg-surface-2 p-0.5">
               {[3, 5, 7].map((value) => (
-                <button key={value} type="button" onClick={() => setPastDays(value)} className={`h-8 rounded-sm text-xs font-medium ${pastDays === value ? "bg-surface text-accent shadow-sm" : "text-ink-2"}`}>{value} days</button>
+                <button key={value} type="button" onClick={() => selectEvidenceWindow(value)} className={`h-8 rounded-sm text-xs font-medium ${pastDays === value ? "bg-surface text-accent shadow-sm" : "text-ink-2"}`}>{value} days</button>
               ))}
             </div>
           </fieldset>
