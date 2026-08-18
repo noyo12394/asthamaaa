@@ -118,6 +118,7 @@ export default function TerrainSmokeLab() {
     const id = ++requestId.current;
     setLoading(true);
     setError("");
+    setAnalysis(null);
     try {
       const result = await api<TerrainSmokeAnalysis>(
         `/api/terrain-smoke?lat=${nextPlace.lat}&lng=${nextPlace.lng}&radiusKm=${nextRadius}&pastDays=${nextDays}`
