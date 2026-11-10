@@ -21,6 +21,7 @@ const PRIMARY_NAV = [
   { href: "/compare", label: "Compare" },
   { href: "/outlook", label: "Outlook" },
   { href: "/equity", label: "Equity" },
+  { href: "/monitoring-equity", label: "Monitoring Divide" },
 ];
 
 const MORE_NAV = [

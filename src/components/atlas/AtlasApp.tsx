@@ -4,7 +4,7 @@
  * Command-center orchestrator: left sidebar, map, right inspector, bottom
  * timeline, agent dock, legend, map-mode controls, community-report form.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Bot, Crosshair, Droplets, Flame, Layers3, Radar, ShieldCheck } from "lucide-react";
 import MapCanvas, { type MapViewRequest } from "./MapCanvas";
 import Sidebar from "./Sidebar";
@@ -76,6 +76,16 @@ export default function AtlasApp() {
     setFlyTo({ center: [lng, lat], zoom: 10.5, key: Date.now() });
     setMobilePanel("inspect");
   }, []);
+
+  // Shared community links from research views activate the existing inspector.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("lat") || !params.has("lng")) return;
+    const lat = Number(params.get("lat")), lng = Number(params.get("lng"));
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
+    const label = params.get("label")?.slice(0, 180) || "Community from Monitoring Divide";
+    queueMicrotask(() => pickPlace(lat, lng, label));
+  }, [pickPlace]);
 
   const onMapSelect = useCallback((lat: number, lng: number, feature: SelectedFeature | null) => {
     const label =
