@@ -845,6 +845,11 @@ export default function MonitoringDivide() {
                   are sparse. Model estimates complement observations; they do
                   not create a local measurement.
                 </p>
+                <p className="md-source-note">
+                  This study uses AQS PM₂.₅ parameter 88101. Other Atlas views
+                  may include additional AirNow sites, so their monitoring
+                  distances can differ.
+                </p>
                 <Link
                   href={
                     selected
